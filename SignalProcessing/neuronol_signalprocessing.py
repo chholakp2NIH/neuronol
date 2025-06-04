@@ -465,7 +465,7 @@ def Appendix__derivative_central_secondorder(x, fs):
 def Appendix__derivative_central_fourthorder(x, fs):
     '''
     Calculate derivative of signal 'x' sampled at frequency 'fs'
-    using central difference method of second order.
+    using central difference method of fourth order.
     '''
     n = len(x)
     dxdt = np.zeros((n, 1))
