@@ -1,1 +1,40 @@
-# neuronol
+Project Title: A multimodal electroencephalography and magnetic resonance imaging approach
+to addiction assessment
+
+Software Name: neuronol
+
+Description:
+
+Electroencephalography (EEG) and magnetic resonance imaging (MRI) are complementary
+sources of information on brain function (Denis A Engemann, 2020) and as noninvasive
+technologies can together lead to a deeper understanding of neurodynamics of addiction in
+humans. However, it is not well understood which features of these imaging modalities capture
+information that is independent and complementary and those which are supplementary.
+
+Identifying a combination of EEG and MRI features can enhance the efficiency and robustness of
+such an approach for diagnosis, treatment, and prediction of relapse. The literature is divided on
+the EEG features (Mumtaz, 2018). The robustness of features can be improved via the application
+of the latest EEG signal processing techniques in combination with phenotypes from MRI
+modalities. Moreover, addition of these features needs to be evaluated against clinical
+assessments, new molecular data on polygenic scores (PGS from 1M genotyping arrays),
+epigenetic measures of stress, alcohol and nicotine exposure, and epigenetic age acceleration
+(EAA) with these epigenetic measures being primarily derived from 850k methylome arrays. In
+the NIAAA clinical sample there is a unique opportunity to optimize and test newly derived EEG
+and MRI indicators of addiction against these clinical, genetic, and epigenetic measures, those
+measures already being available.
+
+This software, written primarily in Python, will extract well-established and novel features from
+EEG and MR data to be studied later for their applications in AUD assessment. The features would
+be based on physico-mathematical methods of signal processing and brain time-series analysis.
+The software would be packed in the form of a Python library and would be able to extract all
+features directly from raw EEG and MR data. In addition to the numerical feature values, this
+software would generate audio/visual depictions of results such as graphs, images, and movies
+that can be presented in resulting publications.
+
+References:
+
+Denis A Engemann, O. K. (2020). Combining magnetoencephalography with magnetic
+resonance imaging enhances learning of surrogate-biomarkers. eLife, 9:e54055.
+
+Mumtaz, W. (2018). A review on EEG-based methods for screening and diagnosing alcohol use
+disorder. Cognitive Neurodynamics, 12:141–156.
