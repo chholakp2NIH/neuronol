@@ -1,0 +1,16 @@
+Metadata-Version: 2.4
+Name: neuronol
+Version: 0.0.1
+Summary: Package for working with EEG and MR biomarkers of AUD.
+Author-email: Parth Chholak <parthchholak@gmail.com>
+License: Adapted CC0
+Project-URL: Homepage, https://github.com/chholakp2NIH/neuronol
+Project-URL: Issues, https://github.com/chholakp2NIH/neuronol/issues
+Classifier: Programming Language :: Python :: 3
+Classifier: Operating System :: OS Independent
+Requires-Python: >=3.9
+Description-Content-Type: text/markdown
+License-File: LICENSE.md
+Dynamic: license-file
+
+# neuronol

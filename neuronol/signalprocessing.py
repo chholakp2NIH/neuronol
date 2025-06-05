@@ -6,7 +6,7 @@ from scipy.signal import hilbert
 import matplotlib.pyplot as plt
 import pandas as pd
 from PyEMD import EMD
-from neuronol_power import featureFunc_bandAbsolutePower, featureFunc_bandRelativePower, \
+from neuronol.spectralpower import featureFunc_bandAbsolutePower, featureFunc_bandRelativePower, \
                            featureFunc_centroidFrequencyBand, featureFunc_dominantFrequency
 
 def getAllMarginalSpectrumFeatures(raw, freq_bands, T_max=None):

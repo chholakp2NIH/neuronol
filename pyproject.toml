@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools >= 77.0.3"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "neuronol"
+version = "0.0.1"
+authors = [
+  { name="Parth Chholak", email="parthchholak@gmail.com" },
+]
+description = "Package for working with EEG and MR biomarkers of AUD."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "Adapted CC0" }
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+]
+
+[project.urls]
+Homepage = "https://github.com/chholakp2NIH/neuronol"
+Issues = "https://github.com/chholakp2NIH/neuronol/issues"
