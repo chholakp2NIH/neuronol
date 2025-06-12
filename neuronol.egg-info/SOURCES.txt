@@ -10,3 +10,7 @@ neuronol.egg-info/PKG-INFO
 neuronol.egg-info/SOURCES.txt
 neuronol.egg-info/dependency_links.txt
 neuronol.egg-info/top_level.txt
+neuronol/experimentaltasks/__init__.py
+neuronol/experimentaltasks/auditoryPerseverationTask.py
+neuronol/experimentaltasks/restingState.py
+neuronol/experimentaltasks/visualOddballTask.py
