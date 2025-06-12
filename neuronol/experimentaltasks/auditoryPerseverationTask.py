@@ -1,6 +1,6 @@
 """
-Version 0.7:
-1. Added event time stamps logger.
+Version 0.8:
+1. Added head radius to starting prompt.
 """
 
 # ====================
@@ -19,6 +19,7 @@ import psychtoolbox as ptb
 from psychopy import sound, core, gui, data, visual
 from psychopy.hardware import keyboard
 
+import json
 import os
 import numpy as np
 from numpy.random import default_rng
@@ -111,6 +112,7 @@ exp_info = {
     'SubID': 'sub-00',  # subject's study ID
     'SessionName': list(rand_seed_dict.keys()),
     'DataDir': os.path.join(os.path.expanduser('~/data/bids/'), project_name),
+    'HeadRadius (in cm)': 100,
 }
 dlg = gui.DlgFromDict(dictionary=exp_info, title=task_name)
 
@@ -139,7 +141,9 @@ if not os.path.isdir(exp_info['data_path']):
 
 # Create filname/filepath for the experiment data
 fname_data = exp_info['SubID'] + '_task-' + task_name.lower() + '_events'
+fname_data_head_radius = exp_info['SubID'] + '_desc-manual_headcircumference.json'
 fpath_data = os.path.join(exp_info['data_path'], fname_data)
+fpath_data_head_radius = os.path.join(exp_info['data_path'], fname_data_head_radius)
 
 # ================================
 # Creation of windows and messages
@@ -424,6 +428,15 @@ keys = kb.waitKeys(keyList=['space'])    # wait for spacebar key press
 # Print out total correct responses that were registered and total money earned
 print("\nTotal correct responses =", totalCorrectRespsRegistered)
 print("Total reward earned = $%0.2f" % totalRewardEarned)
+
+# Export the head radius as JSON file
+data_head_radius = {
+    "Value": exp_info['HeadRadius (in cm)'] / 100,  # in meters
+    "Unit": "meters",
+    "MeasurementMethod": "Measured with tape around head."
+}
+with open(fpath_data_head_radius, 'w') as f:
+    json.dump(data_head_radius, f, indent=4)
 
 # Display end message
 page_end.draw() # draw page to buffer screen

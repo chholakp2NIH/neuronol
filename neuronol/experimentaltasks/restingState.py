@@ -1,6 +1,6 @@
 """
-Version 0.7:
-1. Added event time stamps logger.
+Version 0.8:
+1. Added head radius to starting prompt.
 """
 
 # ==============
@@ -11,6 +11,7 @@ Version 0.7:
 from psychopy import core, gui, data, visual, sound
 from psychopy.hardware import keyboard
 
+import json
 import os
 import numpy as np
 import pandas as pd
@@ -54,6 +55,7 @@ exp_info = {
     'SubID': 'sub-00',  # subject's study ID
     'SessionName': session_names,
     'DataDir': os.path.join(os.path.expanduser('~/data/bids'), project_name),
+    'HeadRadius (in cm)': 100,
 }
 dlg = gui.DlgFromDict(dictionary=exp_info, title=task_name)
 
@@ -82,9 +84,11 @@ if not os.path.isdir(exp_info['data_path']):
 
 # Create filname/filepath for the experiment data
 fname_data = exp_info['SubID'] + '_task-' + task_name.lower() + '_events'
+fname_data_head_radius = exp_info['SubID'] + '_desc-manual_headcircumference.json'
 fpath_data = os.path.join(exp_info['data_path'], fname_data)
+fpath_data_head_radius = os.path.join(exp_info['data_path'], fname_data_head_radius)
 
-# print(fpath_data)
+# print(exp_info['HeadRadius (in cm)'])
 
 # ================================
 # Creation of windows and messages
@@ -256,6 +260,15 @@ df_TrialData.to_excel(fpath_data + 'custom.xlsx', index=False)
 # Save stim times as DataFrame
 df_stimtimes = pd.DataFrame(stim_times, columns=['EventName', 'EventTime'])
 df_stimtimes.to_excel(fpath_data + 'stimtimes.xlsx', index=False)
+
+# Export the head radius as JSON file
+data_head_radius = {
+    "Value": exp_info['HeadRadius (in cm)'] / 100,  # in meters
+    "Unit": "meters",
+    "MeasurementMethod": "Measured with tape around head."
+}
+with open(fpath_data_head_radius, 'w') as f:
+    json.dump(data_head_radius, f, indent=4)
 
 # Play the tone
 snd_oe.play()
