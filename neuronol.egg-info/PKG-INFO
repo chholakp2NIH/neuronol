@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: neuronol
-Version: 0.0.2
+Version: 0.0.3
 Summary: Package for working with EEG and MR biomarkers of AUD.
 Author-email: Parth Chholak <parthchholak@gmail.com>
 License: Adapted CC0
