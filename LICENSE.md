@@ -1,1 +1,1 @@
-**This software is distributed under the CC0 license. However, this software is not to be used for any human diagnostic, prognostic, or treatment purposes. Additionally, this software is not to be used to discriminate against or otherwise harm any person or groups of people.** 
+**This software is distributed under the CC0 license. However, this software is not to be used for any human diagnostic, prognostic, or treatment purposes. Additionally, this software is not to be used to discriminate against or otherwise harm any person or groups of people.**
