@@ -6,6 +6,7 @@ neuronol/dataimport.py
 neuronol/preprocessing.py
 neuronol/signalprocessing.py
 neuronol/spectralpower.py
+neuronol/useful_funcs.py
 neuronol.egg-info/PKG-INFO
 neuronol.egg-info/SOURCES.txt
 neuronol.egg-info/dependency_links.txt
