@@ -1,4 +1,3 @@
-import os
 import sys
 from pathlib import Path
 
@@ -20,5 +19,13 @@ fpath = (
 
 # Read data and display
 data_importer = DataImporter(fpath)
-data_importer.read_data_as_df()
-print(data_importer.df)
+data_importer.read_imotions_csv_as_df()
+print(data_importer.df_imotions)
+
+# Get recording date/time
+data_importer.get_recording_datetime_from_imotions_df()
+print(data_importer.recording_dt)
+
+# Drop header info
+data_importer.drop_header_info_from_df()
+print(data_importer.df_imotions)
