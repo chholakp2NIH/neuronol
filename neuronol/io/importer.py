@@ -1,96 +1,194 @@
 import datetime as dt
+import json
 import re
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
+from scipy.interpolate import make_interp_spline
+
+
+class Recording:
+    fpath_import: Path
+    fpath_headcircum: Path
+    df_raw: pd.DataFrame
+    preamble: str
+    recording_dt: dt.datetime
+    eeg_col_nums: list[int]
+    df_eeg: pd.DataFrame
+    head_circum: float
+    head_radius: float
+
+    def __init__(self, fpath_import, fpath_headcircum) -> None:
+        self.fpath_import = fpath_import
+        self.fpath_headcircum = fpath_headcircum
 
 
 class DataImporter:
-    fpath_import: Path
-    df_imotions: pd.DataFrame
-    recording_dt: dt.datetime
-    df_eeg: pd.DataFrame
+    recording: Recording
+    verbose: bool
 
-    # Given
-    possible_unwanted_columns = (
-        ["Row", "SourceStimuliName", "SampleNumber"]
-        + ["Combined Event Source", "EventSource"]
-        + ["Aux%d" % w for w in range(1, 9)]
-        + ["Channel %d" % w for w in range(33, 41)]
-    )
+    def __init__(
+        self, fpath_import: Path, fpath_headcircum: Path, verbose: bool = True
+    ) -> None:
+        self.recording = Recording(fpath_import, fpath_headcircum)
+        self.verbose = verbose
 
-    def __init__(self, fpath_import) -> None:
-        self.fpath_import = fpath_import
-
-    def read_imotions_csv_as_df(self) -> None:
+    def create_mne_raw_from_imotions_csv(self):
         """
-        Read input iMotions CSV data (`self.fpath_import`) as a DataFrame.
+        Main script to generate MNE Raw object from imported iMotions CSV.
         """
-        self.df_imotions = pd.read_csv(self.fpath_import, low_memory=False)
+        # Read head circumference and evaluate head radius
+        self.evaluate_head_radius()
+        message = (
+            f"Head circumference: {self.recording.head_circum * 100:0.1f}cm; "
+            + f"Head radius: {self.recording.head_radius:0.3f}m."
+        )
+        self.log_message(message)
+
+        # Import raw data in CSV file and convert to a formatted dataframe
+        self.read_imotions_data_as_df()
+        message = f"Read all raw iMotions' data from CSV file"
+        self.log_message(message)
+
+        # Read iMotion's CSV file preamble
+        self.read_imotions_csv_preamble()
+        message = f"Read iMotion's preamble from CSV file"
+        self.log_message(message)
+
+        # Get recording datetime from the imported CSV's preamble
+        self.get_recording_datetime_from_imotions_preamble()
+        message = f"Recording time: {self.recording.recording_dt}"
+        self.log_message(message)
+
+        # Extract EEG data from imported iMotions' raw data
+        self.extract_eeg_from_imotions_data()
+        message = f"EEG data extracted from raw iMotions' data"
+        self.log_message(message)
+
+    def add_interpolated_ecg_to_eeg(
+        self,
+        col_ecg: str = "ECG LL-RA CAL",
+        col_timestamps: str = "Timestamp",
+        interp="linear",
+    ):
+        """
+        Extracts ECG data from iMotions' raw data, then interpolates it
+        using `interp` interpolation to match the timestamps for EEG data
+        before adding ECG data to the EEG dataframe.
+
+        Args:
+            interp (str): Interpolation method. Can either be 'linear'
+                          (default) or 'B-spline'.
+        """
+        # Extract ECG data
+        df_ecg = self.recording.df_raw[[col_timestamps, col_ecg]]
+        # df_ecg = self.recording.df_raw["Timestamp"]
+        df_ecg.dropna(inplace=True)  # drop rows without ECG data
+        df_ecg = df_ecg.astype("float")
+        df_ecg.iloc[:, 1:] /= 1e3  # convert ECG signal unit from mV to V
+        df_ecg.reset_index(drop=True, inplace=True)
+
+        # Interpolate ECG data to match EEG timestamps and add to EEG df
+        if interp == "linear":
+            self.recording.df_eeg[col_ecg] = np.interp(
+                self.recording.df_eeg[col_timestamps],
+                df_ecg[col_timestamps],
+                df_ecg[col_ecg],
+            )
+        elif interp == "B-spline":
+            bspl = make_interp_spline(
+                df_ecg[col_timestamps], df_ecg[col_ecg], k=3
+            )  # B-spline cubic
+            self.recording.df_eeg[col_ecg] = bspl(self.recording.df_eeg["Timestamp"])
         return None
 
-    def get_recording_datetime_from_imotions_df(self):
+    def evaluate_head_radius(self):
         """
-        Find the date/time of the iMotions recording from the `self.df_imotions`
+        Reads head circumference (in meters) from file and calculates head radius.
         """
-        inx_rectime = self.df_imotions.index[
-            self.df_imotions.iloc[:, 0] == "#Recording time"
-        ].to_list()[0]
-        date_str = ""
-        time_str = ""
-        datetime_str = ""
-        for data in self.df_imotions.iloc[inx_rectime].astype(str):
-            if "Date" in data:
-                m = re.search(r"^Date: (\d{4}-\d{2}-\d{2})$", data)
-                if m is not None:
+        with open(self.recording.fpath_headcircum, "r") as f:
+            content = json.load(f)
+        self.recording.head_circum = float(content["Value"])
+        self.recording.head_radius = self.recording.head_circum / (
+            2 * np.pi
+        )  # head circumference / 2π
+        return None
+
+    def read_imotions_data_as_df(self) -> None:
+        """
+        Read input iMotions CSV data as a DataFrame.
+        """
+        self.recording.df_raw = pd.read_csv(
+            self.recording.fpath_import, comment="#", low_memory=False
+        )
+        return None
+
+    def read_imotions_csv_preamble(self) -> None:
+        """
+        Read preamble info from input iMotions CSV data.
+        """
+        with open(self.recording.fpath_import) as f:
+            self.recording.preamble = "".join(
+                [line for line in f.readlines() if line.startswith("#")]
+            )
+        return None
+
+    def get_recording_datetime_from_imotions_preamble(self):
+        """
+        Find the date/time of the iMotions recording from the CSV preamble.
+        """
+        date_str = time_str = None
+        for line in self.recording.preamble.splitlines():
+            if line.startswith("#Recording time"):
+                m = re.search(r"^.+,Date: (\d{4}-\d{2}-\d{2}),.+$", line)
+                if m:
                     date_str = m.group(1)
-            elif "Time" in data:
-                m = re.search(r"^Time: (.+) .+$", data)
-                if m is not None:
+                m = re.search(r"^.+,Time: (\d{2}:\d{2}:\d{2}\.\d{3}) .+,.+$", line)
+                if m:
                     time_str = m.group(1)
-        if (date_str != "") and (time_str != ""):
-            datetime_str = date_str + " " + time_str
+                break
+        if (date_str is not None) and (time_str is not None):
+            self.recording.recording_dt = dt.datetime.fromisoformat(
+                f"{date_str} {time_str}"
+            )
         else:
-            raise Exception("\n(!!) Recording date and time strings not found\n")
-        self.recording_dt = dt.datetime.fromisoformat(datetime_str)
+            raise ValueError(
+                "(!!) Could not find recording date/time from iMotions preamble"
+            )
         return None
 
-    def drop_header_info_from_df(self):
+    def get_eeg_data_column_numbers(self):
         """
-        Drop additional info (CSV header info) from imported `self.df_imotions`
+        Use the iMotions CSV preamble to find the column numbers that contain
+        EEG data.
         """
-        # Drop general info at top
-        inx_first_timepoint = self.df_imotions.index[
-            self.df_imotions.iloc[:, 0] == "1"
-        ].to_list()[0]
-        inx_colnames = inx_first_timepoint - 1
-        self.df_imotions.drop(self.df_imotions.head(inx_colnames).index, inplace=True)
-
-        # Change column names
-        colnames = self.df_imotions.iloc[0].values
-        self.df_imotions = self.df_imotions[1:]
-        self.df_imotions.columns = colnames
+        for line in self.recording.preamble.splitlines():
+            if line.startswith("#Group"):
+                self.recording.eeg_col_nums = [
+                    i for i, w in enumerate(line.split(sep=",")) if w == "EEG"
+                ]
+                break
         return None
 
-    def extract_eeg_from_imotions_data(self, possible_unwanted_columns):
+    def extract_eeg_from_imotions_data(self):
         """
-        Extract EEG data from iMotions dataframe. Returns EEG data in Volts.
+        Extract EEG data from iMotions data. Returns EEG data in Volts.
         """
-
-        df_eeg = df_imotions.drop(
-            df_imotions.index[df_imotions["Fp1"].isna()]
-        )  # drop rows without EEG data
-        df_eeg.dropna(
-            axis=1, how="all", inplace=True
-        )  # drop columns that don't have any data left
-        available_unwanted_columns = [
-            c for c in possible_unwanted_columns if c in df_eeg.columns
-        ]
-        df_eeg.drop(
-            columns=available_unwanted_columns, inplace=True
-        )  # drop avail unwanted cols
+        self.get_eeg_data_column_numbers()  # Get column numbers corres to EEG data
+        df_eeg = self.recording.df_raw.iloc[:, [1] + self.recording.eeg_col_nums]
+        df_eeg.dropna(inplace=True)  # drop rows without EEG data
         df_eeg = df_eeg.astype("float")
         df_eeg.iloc[:, 1:] /= 1e6  # convert EEG signal unit from μV to V
         df_eeg.reset_index(drop=True, inplace=True)
+        self.recording.df_eeg = df_eeg
+        return None
 
-        return df_eeg
+    def log_message(self, message: str):
+        """
+        Print given message in the default printing style.
+        """
+        if self.verbose:
+            print("\n!!", message, "\n")
+        else:
+            pass

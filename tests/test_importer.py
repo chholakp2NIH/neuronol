@@ -27,8 +27,8 @@ def fpath_eeg_csv():
 def test_read_imotions_csv_as_df(fpath_eeg_csv):
     data_importer = DataImporter(fpath_eeg_csv)
     data_importer.read_imotions_csv_as_df()
-    assert isinstance(data_importer.df_imotions, pd.DataFrame)
-    assert not data_importer.df_imotions.empty
+    assert isinstance(data_importer.df_raw, pd.DataFrame)
+    assert not data_importer.df_raw.empty
 
 
 # Read recording date/time
@@ -44,4 +44,4 @@ def test_drop_header_info_from_df(fpath_eeg_csv):
     data_importer = DataImporter(fpath_eeg_csv)
     data_importer.read_imotions_csv_as_df()
     data_importer.drop_header_info_from_df()
-    assert "Timestamp" in data_importer.df_imotions.columns.to_list()
+    assert "Timestamp" in data_importer.df_raw.columns.to_list()
