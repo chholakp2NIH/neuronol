@@ -176,7 +176,7 @@ class DataImporter:
         Extract EEG data from iMotions data. Returns EEG data in Volts.
         """
         self.get_eeg_data_column_numbers()  # Get column numbers corres to EEG data
-        df_eeg = self.recording.df_raw.iloc[:, [1] + self.recording.eeg_col_nums]
+        df_eeg = self.recording.df_raw.iloc[:, [1] + self.recording.eeg_col_nums].copy()
         df_eeg.dropna(inplace=True)  # drop rows without EEG data
         df_eeg = df_eeg.astype("float")
         df_eeg.iloc[:, 1:] /= 1e6  # convert EEG signal unit from μV to V
