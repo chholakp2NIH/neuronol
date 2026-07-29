@@ -7,6 +7,9 @@ import numpy as np
 import pandas as pd
 from scipy.interpolate import make_interp_spline
 
+from neuronol.neuronol.constants import (IMOTIONS_ECG_COL,
+                                         IMOTIONS_TIMESTAMP_COL)
+
 
 class Recording:
     fpath_import: Path
@@ -44,75 +47,34 @@ class DataImporter:
             f"Head circumference: {self.recording.head_circum * 100:0.1f}cm; "
             + f"Head radius: {self.recording.head_radius:0.3f}m."
         )
-        self.log_message(message)
+        self._log_message(message)
 
         # Import raw data in CSV file and convert to a formatted dataframe
         self.read_imotions_data_as_df()
         message = f"Read all raw iMotions' data from CSV file"
-        self.log_message(message)
+        self._log_message(message)
 
         # Read iMotion's CSV file preamble
         self.read_imotions_csv_preamble()
         message = f"Read iMotion's preamble from CSV file"
-        self.log_message(message)
+        self._log_message(message)
 
         # Get recording datetime from the imported CSV's preamble
         self.get_recording_datetime_from_imotions_preamble()
         message = f"Recording time: {self.recording.recording_dt}"
-        self.log_message(message)
+        self._log_message(message)
 
         # Extract EEG data from imported iMotions' raw data
         self.extract_eeg_from_imotions_data()
         message = f"EEG data extracted from raw iMotions' data"
-        self.log_message(message)
+        self._log_message(message)
 
-    def add_interpolated_ecg_to_eeg(
-        self,
-        col_ecg: str = "ECG LL-RA CAL",
-        col_timestamps: str = "Timestamp",
-        interp="linear",
-    ):
+    def read_imotions_csv_full(self) -> None:
         """
-        Extracts ECG data from iMotions' raw data, then interpolates it
-        using `interp` interpolation to match the timestamps for EEG data
-        before adding ECG data to the EEG dataframe.
-
-        Args:
-            interp (str): Interpolation method. Can either be 'linear'
-                          (default) or 'B-spline'.
+        Read the full input iMotion CSV and separate the data and preamble.
         """
-        # Extract ECG data
-        df_ecg = self.recording.df_raw[[col_timestamps, col_ecg]]
-        # df_ecg = self.recording.df_raw["Timestamp"]
-        df_ecg.dropna(inplace=True)  # drop rows without ECG data
-        df_ecg = df_ecg.astype("float")
-        df_ecg.iloc[:, 1:] /= 1e3  # convert ECG signal unit from mV to V
-        df_ecg.reset_index(drop=True, inplace=True)
-
-        # Interpolate ECG data to match EEG timestamps and add to EEG df
-        if interp == "linear":
-            self.recording.df_eeg[col_ecg] = np.interp(
-                self.recording.df_eeg[col_timestamps],
-                df_ecg[col_timestamps],
-                df_ecg[col_ecg],
-            )
-        elif interp == "B-spline":
-            bspl = make_interp_spline(
-                df_ecg[col_timestamps], df_ecg[col_ecg], k=3
-            )  # B-spline cubic
-            self.recording.df_eeg[col_ecg] = bspl(self.recording.df_eeg["Timestamp"])
-        return None
-
-    def evaluate_head_radius(self):
-        """
-        Reads head circumference (in meters) from file and calculates head radius.
-        """
-        with open(self.recording.fpath_headcircum, "r") as f:
-            content = json.load(f)
-        self.recording.head_circum = float(content["Value"])
-        self.recording.head_radius = self.recording.head_circum / (
-            2 * np.pi
-        )  # head circumference / 2π
+        self.read_imotions_data_as_df()
+        self.read_imotions_csv_preamble()
         return None
 
     def read_imotions_data_as_df(self) -> None:
@@ -132,6 +94,18 @@ class DataImporter:
             self.recording.preamble = "".join(
                 [line for line in f.readlines() if line.startswith("#")]
             )
+        return None
+
+    def evaluate_head_radius(self):
+        """
+        Reads head circumference (in meters) from file and calculates head radius.
+        """
+        with open(self.recording.fpath_headcircum, "r") as f:
+            content = json.load(f)
+        self.recording.head_circum = float(content["Value"])
+        self.recording.head_radius = self.recording.head_circum / (
+            2 * np.pi
+        )  # head circumference / 2π
         return None
 
     def get_recording_datetime_from_imotions_preamble(self):
@@ -154,7 +128,7 @@ class DataImporter:
             )
         else:
             raise ValueError(
-                "(!!) Could not find recording date/time from iMotions preamble"
+                "(xx) Could not find recording date/time from iMotions preamble"
             )
         return None
 
@@ -184,7 +158,43 @@ class DataImporter:
         self.recording.df_eeg = df_eeg
         return None
 
-    def log_message(self, message: str):
+    def add_interpolated_ecg_to_eeg(
+        self,
+        col_ecg: str = IMOTIONS_ECG_COL,
+        col_timestamps: str = IMOTIONS_TIMESTAMP_COL,
+        interp="linear",
+    ):
+        """
+        Extracts ECG data from iMotions' raw data, then interpolates it
+        using `interp` interpolation to match the timestamps for EEG data
+        before adding ECG data to the EEG dataframe.
+
+        Args:
+            interp (str): Interpolation method. Can either be 'linear'
+                          (default) or 'B-spline'.
+        """
+        # Extract ECG data
+        df_ecg = self.recording.df_raw[[col_timestamps, col_ecg]].copy()
+        df_ecg.dropna(inplace=True)  # drop rows without ECG data
+        df_ecg = df_ecg.astype("float")
+        df_ecg.iloc[:, 1:] /= 1e3  # convert ECG signal unit from mV to V
+        df_ecg.reset_index(drop=True, inplace=True)
+
+        # Interpolate ECG data to match EEG timestamps and add to EEG df
+        if interp == "linear":
+            self.recording.df_eeg[col_ecg] = np.interp(
+                self.recording.df_eeg[col_timestamps],
+                df_ecg[col_timestamps],
+                df_ecg[col_ecg],
+            )
+        elif interp == "B-spline":
+            bspl = make_interp_spline(
+                df_ecg[col_timestamps], df_ecg[col_ecg], k=3
+            )  # B-spline cubic
+            self.recording.df_eeg[col_ecg] = bspl(self.recording.df_eeg["Timestamp"])
+        return None
+
+    def _log_message(self, message: str):
         """
         Print given message in the default printing style.
         """

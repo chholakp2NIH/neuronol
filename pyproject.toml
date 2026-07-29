@@ -4,19 +4,32 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "neuronol"
-version = "0.0.4"
+version = "0.0.5a"
+# dynamic = ["version"]
+dependencies = [
+  "mne",
+  "numpy",
+  "scipy",
+  "pandas",
+]
+requires-python = ">=3.11"
 authors = [
   { name="Parth Chholak", email="parthchholak@gmail.com" },
 ]
 description = "Package for working with EEG and MR biomarkers of AUD."
 readme = "README.md"
-requires-python = ">=3.9"
-license = { text = "Adapted CC0" }
+license = "LicenseRef-Adapted-CC0"
+license-files = ["LICENSE.md"]
+keywords = ["eeg", "meg", "m/eeg", "mri", "fmri", "neuroimaging", "ai", "ml", "addiction", "aud"]
 classifiers = [
     "Programming Language :: Python :: 3",
     "Operating System :: OS Independent",
+    "Development Status :: 3 - Alpha",
 ]
 
+[project.optional-dependencies]
+dev = ["pytest"]
+
 [project.urls]
-Homepage = "https://github.com/chholakp2NIH/neuronol"
+Repository = "https://github.com/chholakp2NIH/neuronol"
 Issues = "https://github.com/chholakp2NIH/neuronol/issues"
