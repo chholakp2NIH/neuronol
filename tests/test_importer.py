@@ -5,8 +5,12 @@ import pandas as pd
 import pytest
 from dotenv import load_dotenv
 
-from neuronol.neuronol.constants import IMOTIONS_ECG_COL
-from neuronol.neuronol.io.importer import DataImporter
+from neuronol.constants import (
+    IMOTIONS_BLINK_COL,
+    IMOTIONS_BLINK_COL_POSITIVE_VALUE,
+    IMOTIONS_ECG_COL,
+)
+from neuronol.io.importer import DataImporter
 
 # import sys
 # from pathlib import Path
@@ -81,6 +85,7 @@ def test_extract_eeg_from_imotions_data(fpath_eeg_csv, fpath_headcircum):
     assert isinstance(data_importer.recording.df_eeg, pd.DataFrame)
     assert not data_importer.recording.df_eeg.empty
 
+
 # Extract head radius from dedicated JSON file
 def test_head_radius(fpath_eeg_csv, fpath_headcircum):
     data_importer = DataImporter(fpath_eeg_csv, fpath_headcircum)
@@ -90,6 +95,7 @@ def test_head_radius(fpath_eeg_csv, fpath_headcircum):
     assert data_importer.recording.head_circum < 1
     assert data_importer.recording.head_circum > 0
 
+
 # Read ECG data from iMotions CSV and interpolate it to match EEG timepoints
 def test_add_interpolated_ecg_to_eeg(fpath_eeg_csv, fpath_headcircum):
     data_importer = DataImporter(fpath_eeg_csv, fpath_headcircum)
@@ -97,6 +103,17 @@ def test_add_interpolated_ecg_to_eeg(fpath_eeg_csv, fpath_headcircum):
     data_importer.extract_eeg_from_imotions_data()
     data_importer.add_interpolated_ecg_to_eeg()
     assert data_importer.recording.df_eeg[IMOTIONS_ECG_COL].isna().sum() == 0
+
+
+# Extract blink times from iMotions' data
+def test_extract_event_times_from_imotions_data(fpath_eeg_csv, fpath_headcircum):
+    data_importer = DataImporter(fpath_eeg_csv, fpath_headcircum)
+    data_importer.read_imotions_csv_full()
+    times = data_importer.extract_event_times_from_imotions_data(
+        IMOTIONS_BLINK_COL, IMOTIONS_BLINK_COL_POSITIVE_VALUE
+    )
+    assert len(times) > 0
+
 
 # Log message
 def test_log_message(fpath_eeg_csv, fpath_headcircum, capsys):

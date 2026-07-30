@@ -38,3 +38,18 @@ resonance imaging enhances learning of surrogate-biomarkers. eLife, 9:e54055.
 
 Mumtaz, W. (2018). A review on EEG-based methods for screening and diagnosing alcohol use
 disorder. Cognitive Neurodynamics, 12:141–156.
+
+# Installation
+Install MNE-Python in its own conda env as recommended on their website (https://mne.tools/stable/install/manual_install.html#manual-install), and then install `neuronol` in the same env.
+```bash
+# MNE installation
+conda update --name=base conda  # update conda
+conda create --channel=conda-forge --strict-channel-priority --name=neuronol mne # can choose any other env name than `neuronol` as well
+
+# Activate env
+conda activate neuronol
+
+# Install neuronol
+python -m pip install -e .
+# python -m pip install -e ".[dev]"
+```

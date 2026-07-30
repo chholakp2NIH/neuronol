@@ -3,12 +3,12 @@ import json
 import re
 from pathlib import Path
 
+import mne
 import numpy as np
 import pandas as pd
 from scipy.interpolate import make_interp_spline
 
-from neuronol.neuronol.constants import (IMOTIONS_ECG_COL,
-                                         IMOTIONS_TIMESTAMP_COL)
+from neuronol.constants import IMOTIONS_ECG_COL, IMOTIONS_TIMESTAMP_COL
 
 
 class Recording:
@@ -21,6 +21,7 @@ class Recording:
     df_eeg: pd.DataFrame
     head_circum: float
     head_radius: float
+    ecg_data_imported: bool | None = None
 
     def __init__(self, fpath_import, fpath_headcircum) -> None:
         self.fpath_import = fpath_import
@@ -37,10 +38,15 @@ class DataImporter:
         self.recording = Recording(fpath_import, fpath_headcircum)
         self.verbose = verbose
 
-    def create_mne_raw_from_imotions_csv(self):
+    def create_mne_raw_from_imotions_csv(self, create_mne_report=False):
         """
         Main script to generate MNE Raw object from imported iMotions CSV.
         """
+
+        # Initialize MNE report (if needed)
+        if create_mne_report:
+            report = mne.Report(title=self.recording.fpath_import, verbose=False)
+
         # Read head circumference and evaluate head radius
         self.evaluate_head_radius()
         message = (
@@ -48,6 +54,8 @@ class DataImporter:
             + f"Head radius: {self.recording.head_radius:0.3f}m."
         )
         self._log_message(message)
+        if create_mne_report:
+            report.add_html(title="Head radius import", html=message)
 
         # Import raw data in CSV file and convert to a formatted dataframe
         self.read_imotions_data_as_df()
@@ -68,6 +76,22 @@ class DataImporter:
         self.extract_eeg_from_imotions_data()
         message = f"EEG data extracted from raw iMotions' data"
         self._log_message(message)
+
+        # Extract ECG signal (Channel: "ECG LL-RA CAL"; in millivolts)
+        if IMOTIONS_ECG_COL in self.recording.df_raw.columns:
+            try:
+                self.add_interpolated_ecg_to_eeg()
+                self.recording.ecg_data_imported = True
+                message = "Successfully imported ECG data."
+            except Exception as e:
+                self.recording.ecg_data_imported = False
+                message = e
+        else:
+            self.recording.ecg_data_imported = False
+            message = f"ECG column ('{IMOTIONS_ECG_COL}' not found in raw data from iMotions.)"
+        self._log_message(message)
+        if create_mne_report:
+            report.add_html(title="ECG data import", html=message)
 
     def read_imotions_csv_full(self) -> None:
         """
@@ -194,7 +218,22 @@ class DataImporter:
             self.recording.df_eeg[col_ecg] = bspl(self.recording.df_eeg["Timestamp"])
         return None
 
-    def _log_message(self, message: str):
+    def extract_event_times_from_imotions_data(
+        self, col_event, positive_val_event
+    ) -> list[float]:
+        """
+        Find times in seconds corresponding to event; reports times
+        at which event column has a value that corresponds to event happening.
+        """
+        df_event = self.recording.df_raw[[IMOTIONS_TIMESTAMP_COL, col_event]].copy()
+        df_event = df_event[df_event[col_event] == positive_val_event]
+        times = (
+            df_event[IMOTIONS_TIMESTAMP_COL]
+            - self.recording.df_raw[IMOTIONS_TIMESTAMP_COL][0]
+        ) / 1000  # in seconds
+        return times.tolist()
+
+    def _log_message(self, message: str | Exception):
         """
         Print given message in the default printing style.
         """
