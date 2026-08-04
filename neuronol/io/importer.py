@@ -8,7 +8,14 @@ import numpy as np
 import pandas as pd
 from scipy.interpolate import make_interp_spline
 
-from neuronol.constants import IMOTIONS_ECG_COL, IMOTIONS_TIMESTAMP_COL
+from neuronol.constants import (
+    IMOTIONS_BLINK_COL,
+    IMOTIONS_BLINK_COL_POSITIVE_VALUE,
+    IMOTIONS_ECG_COL,
+    IMOTIONS_MARKERS_COL,
+    IMOTIONS_TIMESTAMP_COL,
+    T_WIN_NO_DUPL_MARKERS,
+)
 
 
 class Recording:
@@ -22,6 +29,8 @@ class Recording:
     head_circum: float
     head_radius: float
     ecg_data_imported: bool | None = None
+    blink_data_imported: bool | None = None
+    blink_times: np.ndarray
 
     def __init__(self, fpath_import, fpath_headcircum) -> None:
         self.fpath_import = fpath_import
@@ -31,21 +40,27 @@ class Recording:
 class DataImporter:
     recording: Recording
     verbose: bool
+    report: mne.Report
 
     def __init__(
-        self, fpath_import: Path, fpath_headcircum: Path, verbose: bool = True
+        self,
+        fpath_import: Path,
+        fpath_headcircum: Path,
+        verbose: bool = True,
+        create_mne_report: bool = False,
     ) -> None:
         self.recording = Recording(fpath_import, fpath_headcircum)
         self.verbose = verbose
+        self.create_mne_report = create_mne_report
 
-    def create_mne_raw_from_imotions_csv(self, create_mne_report=False):
+        # Initialize MNE report (if needed)
+        if self.create_mne_report:
+            self.report = mne.Report(title=self.recording.fpath_import, verbose=verbose)
+
+    def create_mne_raw_from_imotions_csv(self):
         """
         Main script to generate MNE Raw object from imported iMotions CSV.
         """
-
-        # Initialize MNE report (if needed)
-        if create_mne_report:
-            report = mne.Report(title=self.recording.fpath_import, verbose=False)
 
         # Read head circumference and evaluate head radius
         self.evaluate_head_radius()
@@ -54,8 +69,8 @@ class DataImporter:
             + f"Head radius: {self.recording.head_radius:0.3f}m."
         )
         self._log_message(message)
-        if create_mne_report:
-            report.add_html(title="Head radius import", html=message)
+        if self.create_mne_report:
+            self.report.add_html(title="Head radius import", html=message)
 
         # Import raw data in CSV file and convert to a formatted dataframe
         self.read_imotions_data_as_df()
@@ -90,8 +105,42 @@ class DataImporter:
             self.recording.ecg_data_imported = False
             message = f"ECG column ('{IMOTIONS_ECG_COL}' not found in raw data from iMotions.)"
         self._log_message(message)
-        if create_mne_report:
-            report.add_html(title="ECG data import", html=message)
+        if self.create_mne_report:
+            self.report.add_html(title="ECG data import", html=message)
+
+        # Extract blink times
+        if IMOTIONS_BLINK_COL in self.recording.df_raw.columns:
+            try:
+                self.extract_event_times_from_imotions_data(
+                    IMOTIONS_BLINK_COL, IMOTIONS_BLINK_COL_POSITIVE_VALUE
+                )
+                self.recording.blink_data_imported = True
+                message = "Successfully imported blink data."
+            except Exception as e:
+                self.recording.blink_data_imported = False
+                message = e
+        else:
+            self.recording.blink_data_imported = False
+            message = f"Blink column ('{IMOTIONS_BLINK_COL}' not found in raw data from iMotions.)"
+        self._log_message(message)
+        if self.create_mne_report:
+            self.report.add_html(title="Blink data import", html=message)
+
+        # # Extract event markers
+        # if IMOTIONS_MARKERS_COL in self.recording.df_raw.columns:
+        #     try:
+        #         self.read_event_markers_from_imotions_data()
+        #         self.recording.blink_data_imported = True
+        #         message = "Successfully imported blink data."
+        #     except Exception as e:
+        #         self.recording.blink_data_imported = False
+        #         message = e
+        # else:
+        #     self.recording.blink_data_imported = False
+        #     message = f"Blink column ('{IMOTIONS_BLINK_COL}' not found in raw data from iMotions.)"
+        # self._log_message(message)
+        # if self.create_mne_report:
+        #     self.report.add_html(title="Blink data import", html=message)
 
     def read_imotions_csv_full(self) -> None:
         """
@@ -218,20 +267,55 @@ class DataImporter:
             self.recording.df_eeg[col_ecg] = bspl(self.recording.df_eeg["Timestamp"])
         return None
 
-    def extract_event_times_from_imotions_data(
-        self, col_event, positive_val_event
-    ) -> list[float]:
+    def extract_event_times_from_imotions_data(self, col_event, positive_val_event):
         """
         Find times in seconds corresponding to event; reports times
         at which event column has a value that corresponds to event happening.
         """
         df_event = self.recording.df_raw[[IMOTIONS_TIMESTAMP_COL, col_event]].copy()
         df_event = df_event[df_event[col_event] == positive_val_event]
-        times = (
+        self.recording.blink_times = (
             df_event[IMOTIONS_TIMESTAMP_COL]
             - self.recording.df_raw[IMOTIONS_TIMESTAMP_COL][0]
         ) / 1000  # in seconds
-        return times.tolist()
+
+    def read_event_markers_from_imotions_data(
+        self,
+        t_win_no_dupl_markers=T_WIN_NO_DUPL_MARKERS,
+        marker_col=IMOTIONS_MARKERS_COL,
+    ) -> pd.DataFrame:
+        """
+        Reads LSL markers from raw dataframe based on iMotions' exported CSV data.
+        Drops trigs that occur sooner than `t_win_no_dupl_markers` time (in s) after
+        an existing trig of the same name.
+        """
+        # Create a df for markers
+        df_markers = self.recording.df_raw[[IMOTIONS_TIMESTAMP_COL, marker_col]].copy()
+        df_markers.dropna(inplace=True)
+        df_markers[IMOTIONS_TIMESTAMP_COL] = df_markers[IMOTIONS_TIMESTAMP_COL].astype(
+            float
+        )
+        # Drop rows with duplicate trigger entries
+        df_markers["Timestamp_secs"] = (
+            df_markers[IMOTIONS_TIMESTAMP_COL] / 1000
+        )  # in seconds
+        df_markers["TimestampDiff_secs"] = df_markers[
+            "Timestamp_secs"
+        ].diff()  # differences between subsequent time stamps (in secs)
+        df_markers["MarkerSameAsLast"] = df_markers[marker_col] == df_markers[
+            marker_col
+        ].shift(periods=1)
+        df_markers = df_markers[
+            ~(
+                (df_markers["TimestampDiff_secs"] < t_win_no_dupl_markers)
+                & (df_markers["MarkerSameAsLast"])
+            )
+        ]
+        t_0 = (
+            self.recording.df_raw[IMOTIONS_TIMESTAMP_COL][0] / 1000
+        )  # timestamp corres to start of imotions recording (in secs)
+        df_markers["Times"] = df_markers["Timestamp_secs"] - t_0
+        return df_markers[["Times", marker_col]]
 
     def _log_message(self, message: str | Exception):
         """

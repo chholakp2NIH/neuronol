@@ -1,6 +1,7 @@
 import datetime
 import os
 
+import mne
 import pandas as pd
 import pytest
 from dotenv import load_dotenv
@@ -9,16 +10,9 @@ from neuronol.constants import (
     IMOTIONS_BLINK_COL,
     IMOTIONS_BLINK_COL_POSITIVE_VALUE,
     IMOTIONS_ECG_COL,
+    IMOTIONS_MARKERS_COL,
 )
 from neuronol.io.importer import DataImporter
-
-# import sys
-# from pathlib import Path
-# # Add the outer parent directory to the path list
-# # This corresponds to: /Users/chholakp2/analysis/neuronol
-# project_root = Path(__file__).resolve().parent.parent
-# if str(project_root) not in sys.path:
-#     sys.path.insert(0, str(project_root))
 
 
 # Given
@@ -32,6 +26,29 @@ def fpath_eeg_csv():
 def fpath_headcircum():
     load_dotenv()
     return os.getenv("HEADCIRCUM_JSON")
+
+
+@pytest.fixture
+def fpath_eeg_csv_trigs():
+    load_dotenv()
+    return os.getenv("EEG_CSV_IMOTIONS_TRIGS")
+
+
+@pytest.fixture
+def model_events_sequence():
+    load_dotenv()
+    fpath_events_seq: str = os.getenv("MODEL_EVENTS_SEQUENCE")
+    df_events = pd.read_csv(fpath_events_seq)
+    return df_events["Event"]
+
+
+# Create MNE raw from iMotions CSV
+def test_create_mne_raw_from_imotions_csv(fpath_eeg_csv, fpath_headcircum):
+    data_importer = DataImporter(
+        fpath_eeg_csv, fpath_headcircum, create_mne_report=True
+    )
+    data_importer.create_mne_raw_from_imotions_csv()
+    assert isinstance(data_importer.report, mne.Report)
 
 
 # Read data
@@ -109,10 +126,27 @@ def test_add_interpolated_ecg_to_eeg(fpath_eeg_csv, fpath_headcircum):
 def test_extract_event_times_from_imotions_data(fpath_eeg_csv, fpath_headcircum):
     data_importer = DataImporter(fpath_eeg_csv, fpath_headcircum)
     data_importer.read_imotions_csv_full()
-    times = data_importer.extract_event_times_from_imotions_data(
+    data_importer.extract_event_times_from_imotions_data(
         IMOTIONS_BLINK_COL, IMOTIONS_BLINK_COL_POSITIVE_VALUE
     )
-    assert len(times) > 0
+    assert len(data_importer.recording.blink_times) > 0
+
+
+# Extract event triggers from iMotions' data
+def test_read_event_markers_from_imotions_data(
+    fpath_eeg_csv_trigs, fpath_headcircum, model_events_sequence
+):
+    data_importer = DataImporter(fpath_eeg_csv_trigs, fpath_headcircum)
+    data_importer.read_imotions_csv_full()
+    df_markers = data_importer.read_event_markers_from_imotions_data()
+    events_read_from_triggers = df_markers[IMOTIONS_MARKERS_COL].values
+    events_sequence_designed = model_events_sequence.values
+    n_events_min = min(len(events_read_from_triggers), len(events_sequence_designed))
+    assert all(
+        events_read_from_triggers[:n_events_min]
+        == events_sequence_designed[:n_events_min]
+    )
+    # assert len(times) > 0
 
 
 # Log message

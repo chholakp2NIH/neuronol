@@ -1,25 +1,14 @@
-import sys
+import os
 from pathlib import Path
 
-# Add the outer parent directory to the path list
-# This corresponds to: /Users/chholakp2/analysis/neuronol
-project_root = Path(__file__).resolve().parent.parent
-if str(project_root) not in sys.path:
-    sys.path.insert(0, str(project_root))
+from dotenv import load_dotenv
 
 from neuronol.io.importer import DataImporter
 
 # Given
-# fpath = Path.home() / "data/bids/eegacamp/sub-00/ses-studyvisit2/eeg/sub-00_raw.csv"
-fpath_import = (
-    Path.home()
-    / "data/bids/imotions-sample/sub-xx/ses-studyvisit2/eeg/sub-xx_task-all_eeg.csv"
-)
-fpath_headcircum = (
-    Path.home()
-    / "data/bids/imotions-sample/sub-xx/ses-studyvisit2/eeg/sub-xx_desc-manual_headcircumference.json"
-)
-# print(fpath)
+load_dotenv()
+fpath_import = os.getenv("EEG_CSV_IMOTIONS_TRIGS")
+fpath_headcircum = os.getenv("HEADCIRCUM_JSON")
 
 # Read data and display
 data_importer = DataImporter(
@@ -30,5 +19,7 @@ data_importer = DataImporter(
 data_importer.create_mne_raw_from_imotions_csv()
 
 # Test function
-data_importer.extract_event_times_from_imotions_data("Blink", 1)
+# data_importer.read_event_markers_from_imotions_data()
+df_markers = data_importer.read_event_markers_from_imotions_data()
+print(df_markers)
 # print(data_importer.recording.df_eeg)
