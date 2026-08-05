@@ -9,11 +9,13 @@ import pandas as pd
 from scipy.interpolate import make_interp_spline
 
 from neuronol.constants import (
+    EASYCAP_EEG_CHANNELS,
     IMOTIONS_BLINK_COL,
     IMOTIONS_BLINK_COL_POSITIVE_VALUE,
     IMOTIONS_ECG_COL,
     IMOTIONS_MARKERS_COL,
     IMOTIONS_TIMESTAMP_COL,
+    SFREQ,
     T_WIN_NO_DUPL_MARKERS,
 )
 
@@ -30,7 +32,10 @@ class Recording:
     head_radius: float
     ecg_data_imported: bool | None = None
     blink_data_imported: bool | None = None
-    blink_times: np.ndarray
+    event_markers_imported: bool | None = None
+    blink_times: np.ndarray | None = None
+    event_markers: pd.DataFrame | None = None
+    raw: mne.io.RawArray
 
     def __init__(self, fpath_import, fpath_headcircum) -> None:
         self.fpath_import = fpath_import
@@ -41,21 +46,39 @@ class DataImporter:
     recording: Recording
     verbose: bool
     report: mne.Report
+    create_mne_report: bool | None = None
 
     def __init__(
         self,
         fpath_import: Path,
         fpath_headcircum: Path,
+        fpath_mne_report: Path | None = None,
         verbose: bool = True,
-        create_mne_report: bool = False,
     ) -> None:
         self.recording = Recording(fpath_import, fpath_headcircum)
         self.verbose = verbose
-        self.create_mne_report = create_mne_report
+        if fpath_mne_report and fpath_mne_report is not None:
+            self.fpath_mne_report = fpath_mne_report
+            self.create_mne_report = True
+        else:
+            self.create_mne_report = False
 
+    def run(self):
+        """
+        Run data import.
+        """
         # Initialize MNE report (if needed)
         if self.create_mne_report:
-            self.report = mne.Report(title=self.recording.fpath_import, verbose=verbose)
+            self.report = mne.Report(
+                title=self.recording.fpath_import, verbose=self.verbose
+            )
+
+        # Create MNE Raw from iMotions' exported CSV
+        self.create_mne_raw_from_imotions_csv()
+
+        # Save MNE report (if created)
+        if self.create_mne_report:
+            self.report.save(self.fpath_mne_report, overwrite=True)
 
     def create_mne_raw_from_imotions_csv(self):
         """
@@ -126,21 +149,26 @@ class DataImporter:
         if self.create_mne_report:
             self.report.add_html(title="Blink data import", html=message)
 
-        # # Extract event markers
-        # if IMOTIONS_MARKERS_COL in self.recording.df_raw.columns:
-        #     try:
-        #         self.read_event_markers_from_imotions_data()
-        #         self.recording.blink_data_imported = True
-        #         message = "Successfully imported blink data."
-        #     except Exception as e:
-        #         self.recording.blink_data_imported = False
-        #         message = e
-        # else:
-        #     self.recording.blink_data_imported = False
-        #     message = f"Blink column ('{IMOTIONS_BLINK_COL}' not found in raw data from iMotions.)"
-        # self._log_message(message)
-        # if self.create_mne_report:
-        #     self.report.add_html(title="Blink data import", html=message)
+        # Extract event markers
+        if IMOTIONS_MARKERS_COL in self.recording.df_raw.columns:
+            try:
+                self.read_event_markers_from_imotions_data()
+                self.recording.event_markers_imported = True
+                message = "Successfully imported event markers."
+            except Exception as e:
+                self.recording.event_markers_imported = False
+                message = e
+        else:
+            self.recording.event_markers_imported = False
+            message = f"Event marker column ('{IMOTIONS_MARKERS_COL}' not found in raw data from iMotions.)"
+        self._log_message(message)
+        if self.create_mne_report:
+            self.report.add_html(title="Event markers import", html=message)
+
+        # Convert EEG/ECG dataframe to MNE Raw object
+        self.convert_electrophys_data_to_mne_raw_object()
+        message = f"EEG/ECG data converted to MNE Raw object."
+        self._log_message(message)
 
     def read_imotions_csv_full(self) -> None:
         """
@@ -201,7 +229,7 @@ class DataImporter:
             )
         else:
             raise ValueError(
-                "(xx) Could not find recording date/time from iMotions preamble"
+                "(xx) Could not find recording date/time from iMotions preamble."
             )
         return None
 
@@ -218,18 +246,40 @@ class DataImporter:
                 break
         return None
 
-    def extract_eeg_from_imotions_data(self):
+    def extract_eeg_from_imotions_data(
+        self,
+        eeg_channels: list[str] = EASYCAP_EEG_CHANNELS,
+    ):
         """
         Extract EEG data from iMotions data. Returns EEG data in Volts.
         """
         self.get_eeg_data_column_numbers()  # Get column numbers corres to EEG data
-        df_eeg = self.recording.df_raw.iloc[:, [1] + self.recording.eeg_col_nums].copy()
+        df_eeg = self.recording.df_raw.iloc[:, self.recording.eeg_col_nums].copy()
+        df_eeg.index = self.recording.df_raw[IMOTIONS_TIMESTAMP_COL].astype(float)
         df_eeg.dropna(inplace=True)  # drop rows without EEG data
-        df_eeg = df_eeg.astype("float")
-        df_eeg.iloc[:, 1:] /= 1e6  # convert EEG signal unit from μV to V
-        df_eeg.reset_index(drop=True, inplace=True)
+        df_eeg = df_eeg.astype(float)
+        df_eeg /= 1e6  # convert EEG signal unit from μV to V
+
+        # Ensure channels correctly identified and named
+        msgs = []
+        if len(df_eeg.columns) > len(
+            eeg_channels
+        ):  # iMotions labels AUX channels as EEG in some versions
+            df_eeg = df_eeg.iloc[:, : len(eeg_channels)]
+            msgs.append("Dropped extra misidentified EEG channels.")
+        else:
+            msgs.append("Correct number of EEG channels found in iMotions' CSV.")
+        if df_eeg.columns.tolist() != eeg_channels:
+            df_eeg.columns = eeg_channels
+            msgs.append("Renamed electrophys channel names.")
+        else:
+            msgs.append("Channels correctly named in iMotions' CSV.")
+        message = " ".join(msgs)
+        self._log_message(message)
+        if self.create_mne_report:
+            self.report.add_html(title="EEG data import", html=message)
+
         self.recording.df_eeg = df_eeg
-        return None
 
     def add_interpolated_ecg_to_eeg(
         self,
@@ -247,24 +297,21 @@ class DataImporter:
                           (default) or 'B-spline'.
         """
         # Extract ECG data
-        df_ecg = self.recording.df_raw[[col_timestamps, col_ecg]].copy()
-        df_ecg.dropna(inplace=True)  # drop rows without ECG data
-        df_ecg = df_ecg.astype("float")
-        df_ecg.iloc[:, 1:] /= 1e3  # convert ECG signal unit from mV to V
-        df_ecg.reset_index(drop=True, inplace=True)
-
+        ecg = self.recording.df_raw[col_ecg].copy()
+        ecg.index = self.recording.df_raw[col_timestamps].astype(float)
+        ecg.dropna(inplace=True)  # drop rows without ECG data
+        ecg = ecg.astype("float")
+        ecg /= 1e3  # convert ECG signal unit from mV to V
         # Interpolate ECG data to match EEG timestamps and add to EEG df
         if interp == "linear":
             self.recording.df_eeg[col_ecg] = np.interp(
-                self.recording.df_eeg[col_timestamps],
-                df_ecg[col_timestamps],
-                df_ecg[col_ecg],
+                self.recording.df_eeg.index,
+                ecg.index,
+                ecg.values,
             )
         elif interp == "B-spline":
-            bspl = make_interp_spline(
-                df_ecg[col_timestamps], df_ecg[col_ecg], k=3
-            )  # B-spline cubic
-            self.recording.df_eeg[col_ecg] = bspl(self.recording.df_eeg["Timestamp"])
+            bspl = make_interp_spline(ecg.index, ecg.values, k=3)  # B-spline cubic
+            self.recording.df_eeg[col_ecg] = bspl(self.recording.df_eeg.index)
         return None
 
     def extract_event_times_from_imotions_data(self, col_event, positive_val_event):
@@ -283,7 +330,7 @@ class DataImporter:
         self,
         t_win_no_dupl_markers=T_WIN_NO_DUPL_MARKERS,
         marker_col=IMOTIONS_MARKERS_COL,
-    ) -> pd.DataFrame:
+    ):
         """
         Reads LSL markers from raw dataframe based on iMotions' exported CSV data.
         Drops trigs that occur sooner than `t_win_no_dupl_markers` time (in s) after
@@ -315,7 +362,29 @@ class DataImporter:
             self.recording.df_raw[IMOTIONS_TIMESTAMP_COL][0] / 1000
         )  # timestamp corres to start of imotions recording (in secs)
         df_markers["Times"] = df_markers["Timestamp_secs"] - t_0
-        return df_markers[["Times", marker_col]]
+        self.recording.event_markers = df_markers[["Times", IMOTIONS_MARKERS_COL]]
+
+    def convert_electrophys_data_to_mne_raw_object(self, sfreq: float = SFREQ):
+        """
+        Converts recorded EEG/ECG data to MNE Raw object.
+        """
+        # Convert df to np array
+        data = self.recording.df_eeg.values.T
+
+        # Create MNE Info object
+        ch_names = self.recording.df_eeg.columns.tolist()
+        if self.recording.ecg_data_imported:
+            ch_types = ["eeg"] * (len(ch_names) - 1) + ["ecg"]
+        else:
+            ch_types = ["eeg"] * len(ch_names)
+        info = mne.create_info(ch_names, sfreq, ch_types=ch_types, verbose=self.verbose)
+
+        # Create MNE Raw obj
+        self.recording.raw = mne.io.RawArray(data, info)
+
+    def read_event_markers_from_event_files(self): ...
+
+    # def read_event_times_from_task(self): ...
 
     def _log_message(self, message: str | Exception):
         """

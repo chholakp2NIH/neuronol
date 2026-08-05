@@ -1,12 +1,15 @@
 import datetime
 import os
+from pathlib import Path
 
 import mne
 import pandas as pd
 import pytest
 from dotenv import load_dotenv
+from numpy import isin
 
 from neuronol.constants import (
+    EASYCAP_EEG_CHANNELS,
     IMOTIONS_BLINK_COL,
     IMOTIONS_BLINK_COL_POSITIVE_VALUE,
     IMOTIONS_ECG_COL,
@@ -35,6 +38,12 @@ def fpath_eeg_csv_trigs():
 
 
 @pytest.fixture
+def fpath_mne_report():
+    load_dotenv()
+    return os.getenv("FPATH_MNE_REPORT")
+
+
+@pytest.fixture
 def model_events_sequence():
     load_dotenv()
     fpath_events_seq: str = os.getenv("MODEL_EVENTS_SEQUENCE")
@@ -42,13 +51,21 @@ def model_events_sequence():
     return df_events["Event"]
 
 
+# Run full data import
+def test_run(fpath_eeg_csv, fpath_headcircum, fpath_mne_report):
+    data_importer = DataImporter(
+        fpath_eeg_csv, fpath_headcircum, fpath_mne_report=fpath_mne_report
+    )
+    data_importer.run()
+    assert isinstance(data_importer.recording.raw, mne.io.RawArray)
+    assert Path(fpath_mne_report).exists()
+
+
 # Create MNE raw from iMotions CSV
 def test_create_mne_raw_from_imotions_csv(fpath_eeg_csv, fpath_headcircum):
-    data_importer = DataImporter(
-        fpath_eeg_csv, fpath_headcircum, create_mne_report=True
-    )
+    data_importer = DataImporter(fpath_eeg_csv, fpath_headcircum)
     data_importer.create_mne_raw_from_imotions_csv()
-    assert isinstance(data_importer.report, mne.Report)
+    assert isinstance(data_importer.recording.raw, mne.io.RawArray)
 
 
 # Read data
@@ -98,8 +115,9 @@ def test_get_eeg_data_column_numbers(fpath_eeg_csv, fpath_headcircum):
 def test_extract_eeg_from_imotions_data(fpath_eeg_csv, fpath_headcircum):
     data_importer = DataImporter(fpath_eeg_csv, fpath_headcircum)
     data_importer.read_imotions_csv_full()
-    data_importer.extract_eeg_from_imotions_data()
+    data_importer.extract_eeg_from_imotions_data(eeg_channels=EASYCAP_EEG_CHANNELS)
     assert isinstance(data_importer.recording.df_eeg, pd.DataFrame)
+    assert data_importer.recording.df_eeg.columns.tolist() == EASYCAP_EEG_CHANNELS
     assert not data_importer.recording.df_eeg.empty
 
 
@@ -138,15 +156,29 @@ def test_read_event_markers_from_imotions_data(
 ):
     data_importer = DataImporter(fpath_eeg_csv_trigs, fpath_headcircum)
     data_importer.read_imotions_csv_full()
-    df_markers = data_importer.read_event_markers_from_imotions_data()
-    events_read_from_triggers = df_markers[IMOTIONS_MARKERS_COL].values
+    data_importer.read_event_markers_from_imotions_data()
+    events_read_from_triggers = data_importer.recording.event_markers[
+        IMOTIONS_MARKERS_COL
+    ].values
     events_sequence_designed = model_events_sequence.values
     n_events_min = min(len(events_read_from_triggers), len(events_sequence_designed))
     assert all(
         events_read_from_triggers[:n_events_min]
         == events_sequence_designed[:n_events_min]
     )
-    # assert len(times) > 0
+
+
+# Create MNE Raw from extracted electrophys data
+def test_convert_electrophys_data_to_mne_raw_object(fpath_eeg_csv, fpath_headcircum):
+    data_importer = DataImporter(fpath_eeg_csv, fpath_headcircum)
+    data_importer.read_imotions_csv_full()
+    data_importer.extract_eeg_from_imotions_data()
+    data_importer.add_interpolated_ecg_to_eeg()
+    data_importer.convert_electrophys_data_to_mne_raw_object()
+    assert isinstance(data_importer.recording.raw, mne.io.RawArray)
+    assert data_importer.recording.raw.ch_names == (
+        EASYCAP_EEG_CHANNELS + [IMOTIONS_ECG_COL]
+    )
 
 
 # Log message
