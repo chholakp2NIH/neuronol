@@ -35,6 +35,8 @@ class Recording:
     event_markers_imported: bool | None = None
     blink_times: np.ndarray | None = None
     event_markers: pd.DataFrame | None = None
+    event_onsets: list[float] = []
+    event_descriptions: list[str] = []
     raw: mne.io.RawArray
 
     def __init__(self, fpath_import, fpath_headcircum) -> None:
@@ -52,18 +54,24 @@ class DataImporter:
         self,
         fpath_import: Path,
         fpath_headcircum: Path,
+        fpath_mne_raw: Path | None = None,
         fpath_mne_report: Path | None = None,
         verbose: bool = True,
     ) -> None:
         self.recording = Recording(fpath_import, fpath_headcircum)
         self.verbose = verbose
+        if fpath_mne_raw and fpath_mne_raw is not None:
+            self.fpath_mne_raw = fpath_mne_raw
+            self.save_mne_raw = True
+        else:
+            self.save_mne_raw = False
         if fpath_mne_report and fpath_mne_report is not None:
             self.fpath_mne_report = fpath_mne_report
             self.create_mne_report = True
         else:
             self.create_mne_report = False
 
-    def run(self):
+    def run(self, event_files: list[Path | str] | None = None):
         """
         Run data import.
         """
@@ -75,6 +83,24 @@ class DataImporter:
 
         # Create MNE Raw from iMotions' exported CSV
         self.create_mne_raw_from_imotions_csv()
+
+        # Add events to Raw from Excel files
+        if event_files is not None:
+            for fpath in event_files:
+                self.add_event_markers_from_event_files_to_mne_raw(fpath)
+            self.recording.event_markers_imported = True
+            if self.create_mne_report:
+                events, event_id = mne.events_from_annotations(self.recording.raw)
+                self.report.add_events(
+                    events,
+                    f"Events: Event markers from file(s)",
+                    event_id=event_id,
+                    sfreq=self.recording.raw.info["sfreq"],
+                )
+
+        # Save MNE Raw to disk
+        if self.save_mne_raw:
+            self.recording.raw.save(self.fpath_mne_raw, overwrite=True)
 
         # Save MNE report (if created)
         if self.create_mne_report:
@@ -169,6 +195,18 @@ class DataImporter:
         self.convert_electrophys_data_to_mne_raw_object()
         message = f"EEG/ECG data converted to MNE Raw object."
         self._log_message(message)
+
+        # Add blinks and/or event markers to MNE Raw as events/annotations
+        if self.recording.blink_data_imported or self.recording.event_markers_imported:
+            self.add_read_blinks_and_event_markers_to_mne_raw()
+            if self.create_mne_report:
+                events, event_id = mne.events_from_annotations(self.recording.raw)
+                self.report.add_events(
+                    events,
+                    "Events: blinks and/or event markers",
+                    event_id=event_id,
+                    sfreq=self.recording.raw.info["sfreq"],
+                )
 
     def read_imotions_csv_full(self) -> None:
         """
@@ -321,10 +359,13 @@ class DataImporter:
         """
         df_event = self.recording.df_raw[[IMOTIONS_TIMESTAMP_COL, col_event]].copy()
         df_event = df_event[df_event[col_event] == positive_val_event]
-        self.recording.blink_times = (
+        blink_onsets = (
             df_event[IMOTIONS_TIMESTAMP_COL]
             - self.recording.df_raw[IMOTIONS_TIMESTAMP_COL][0]
         ) / 1000  # in seconds
+        self.recording.blink_times = blink_onsets
+        self.recording.event_onsets += [w for w in blink_onsets]
+        self.recording.event_descriptions += ["blink"] * len(blink_onsets)
 
     def read_event_markers_from_imotions_data(
         self,
@@ -363,6 +404,8 @@ class DataImporter:
         )  # timestamp corres to start of imotions recording (in secs)
         df_markers["Times"] = df_markers["Timestamp_secs"] - t_0
         self.recording.event_markers = df_markers[["Times", IMOTIONS_MARKERS_COL]]
+        self.recording.event_onsets += df_markers["Times"].tolist()
+        self.recording.event_descriptions += df_markers[IMOTIONS_MARKERS_COL].tolist()
 
     def convert_electrophys_data_to_mne_raw_object(self, sfreq: float = SFREQ):
         """
@@ -382,7 +425,42 @@ class DataImporter:
         # Create MNE Raw obj
         self.recording.raw = mne.io.RawArray(data, info)
 
-    def read_event_markers_from_event_files(self): ...
+    def add_read_blinks_and_event_markers_to_mne_raw(self):
+        """
+        Adds the blinks and/or event markers read from iMotions' CSV
+        (if any) as events/annotations to the created MNE Raw object.
+        """
+        annots = mne.Annotations(
+            onset=self.recording.event_onsets,
+            duration=0,
+            description=self.recording.event_descriptions,
+        )
+        self.recording.raw.set_annotations(self.recording.raw.annotations + annots)
+
+    def add_event_markers_from_event_files_to_mne_raw(
+        self, fpath_event_markers_file: Path | str
+    ):
+        """
+        Read event markers from Excel, with columns:
+            `EventName`: Event labels/descriptions
+            `EventTime`: Event timestamps
+        Converts read event markers to datetime and subtracts the recording datetime
+        to finally produce event times and descriptions similar to event triggers.
+        """
+        df = pd.read_excel(fpath_event_markers_file)
+        event_descriptions = df["EventName"].tolist()
+        event_datetimes = [dt.datetime.fromtimestamp(ts) for ts in df["EventTime"]]
+        event_onsets = [
+            (dt - self.recording.recording_dt).total_seconds() for dt in event_datetimes
+        ]
+        # self.recording.event_onsets += event_onsets
+        # self.recording.event_descriptions += event_descriptions
+        annots = mne.Annotations(
+            onset=event_onsets,
+            duration=0,
+            description=event_descriptions,
+        )
+        self.recording.raw.set_annotations(self.recording.raw.annotations + annots)
 
     # def read_event_times_from_task(self): ...
 

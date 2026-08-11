@@ -26,21 +26,15 @@ def fpath_eeg_csv():
 
 
 @pytest.fixture
-def fpath_headcircum():
-    load_dotenv()
-    return os.getenv("HEADCIRCUM_JSON")
-
-
-@pytest.fixture
-def fpath_eeg_csv_trigs():
-    load_dotenv()
-    return os.getenv("EEG_CSV_IMOTIONS_TRIGS")
-
-
-@pytest.fixture
 def fpath_mne_report():
     load_dotenv()
     return os.getenv("FPATH_MNE_REPORT")
+
+
+@pytest.fixture
+def fpath_mne_raw():
+    load_dotenv()
+    return os.getenv("FPATH_MNE_RAW")
 
 
 @pytest.fixture
@@ -51,14 +45,80 @@ def model_events_sequence():
     return df_events["Event"]
 
 
+@pytest.fixture
+def fpath_eeg_csv_trigs():
+    load_dotenv()
+    return os.getenv("EEG_CSV_IMOTIONS_TRIGS")
+
+
+@pytest.fixture
+def fpath_mne_report_trigs():
+    load_dotenv()
+    return os.getenv("FPATH_MNE_REPORT_TRIGS")
+
+
+@pytest.fixture
+def fpath_mne_raw_trigs():
+    load_dotenv()
+    return os.getenv("FPATH_MNE_RAW_TRIGS")
+
+
+@pytest.fixture
+def model_events_sequence_trigs():
+    load_dotenv()
+    fpath_events_seq: str = os.getenv("MODEL_EVENTS_SEQUENCE_TRIGS")
+    df_events = pd.read_csv(fpath_events_seq)
+    return df_events["Event"]
+
+
+@pytest.fixture
+def fpath_eeg_csv_long():
+    load_dotenv()
+    return os.getenv("EEG_CSV_IMOTIONS_LONG")
+
+
+@pytest.fixture
+def fpath_mne_report_long():
+    load_dotenv()
+    return os.getenv("FPATH_MNE_REPORT_LONG")
+
+
+@pytest.fixture
+def fpath_mne_raw_long():
+    load_dotenv()
+    return os.getenv("FPATH_MNE_RAW_LONG")
+
+
+@pytest.fixture
+def model_events_sequence_long():
+    load_dotenv()
+    fpath_events_seq: str = os.getenv("MODEL_EVENTS_SEQUENCE_LONG")
+    df_events = pd.read_csv(fpath_events_seq)
+    return df_events["Event"]
+
+
+@pytest.fixture
+def fpath_headcircum():
+    load_dotenv()
+    return os.getenv("HEADCIRCUM_JSON")
+
+
 # Run full data import
-def test_run(fpath_eeg_csv, fpath_headcircum, fpath_mne_report):
+def test_run(
+    fpath_eeg_csv_long, fpath_headcircum, fpath_mne_raw_long, fpath_mne_report_long
+):
     data_importer = DataImporter(
-        fpath_eeg_csv, fpath_headcircum, fpath_mne_report=fpath_mne_report
+        fpath_eeg_csv_long, fpath_headcircum, fpath_mne_report=fpath_mne_report_long
     )
     data_importer.run()
     assert isinstance(data_importer.recording.raw, mne.io.RawArray)
-    assert Path(fpath_mne_report).exists()
+    assert Path(fpath_mne_report_long).exists()
+    data_importer = DataImporter(
+        fpath_eeg_csv_long, fpath_headcircum, fpath_mne_raw=fpath_mne_raw_long
+    )
+    data_importer.run()
+    assert isinstance(data_importer.recording.raw, mne.io.RawArray)
+    assert Path(fpath_mne_raw_long).exists()
 
 
 # Create MNE raw from iMotions CSV
@@ -148,11 +208,13 @@ def test_extract_event_times_from_imotions_data(fpath_eeg_csv, fpath_headcircum)
         IMOTIONS_BLINK_COL, IMOTIONS_BLINK_COL_POSITIVE_VALUE
     )
     assert len(data_importer.recording.blink_times) > 0
+    assert len(data_importer.recording.event_onsets) > 0
+    assert sum([w == "blink" for w in data_importer.recording.event_descriptions]) > 0
 
 
 # Extract event triggers from iMotions' data
 def test_read_event_markers_from_imotions_data(
-    fpath_eeg_csv_trigs, fpath_headcircum, model_events_sequence
+    fpath_eeg_csv_trigs, fpath_headcircum, model_events_sequence_trigs
 ):
     data_importer = DataImporter(fpath_eeg_csv_trigs, fpath_headcircum)
     data_importer.read_imotions_csv_full()
@@ -160,12 +222,15 @@ def test_read_event_markers_from_imotions_data(
     events_read_from_triggers = data_importer.recording.event_markers[
         IMOTIONS_MARKERS_COL
     ].values
-    events_sequence_designed = model_events_sequence.values
+    events_sequence_designed = model_events_sequence_trigs.values
     n_events_min = min(len(events_read_from_triggers), len(events_sequence_designed))
     assert all(
         events_read_from_triggers[:n_events_min]
         == events_sequence_designed[:n_events_min]
     )
+    assert len(events_read_from_triggers) > 0
+    assert len(data_importer.recording.event_onsets) > 0
+    assert len(data_importer.recording.event_descriptions) > 0
 
 
 # Create MNE Raw from extracted electrophys data
