@@ -5,6 +5,8 @@ IMOTIONS_BLINK_COL_POSITIVE_VALUE = 1
 IMOTIONS_MARKERS_COL = "Description"
 T_WIN_NO_DUPL_MARKERS = 1  # time window in which no duplicate markers are expected
 SFREQ = 1000
+
+# Easycap channel names
 EASYCAP_EEG_CHANNELS = [
     "Fp1",
     "Fz",
@@ -39,3 +41,15 @@ EASYCAP_EEG_CHANNELS = [
     "F8",
     "Fp2",
 ]
+
+# BrainStorm vars in the exported mat file with digitization data
+BS_VAR_CHANNEL = "Channel"
+BS_SUBVAR_CHANNEL_NAME = "Name"
+BS_SUBVAR_CHANNEL_LOC = "Loc"
+BS_VAR_HEADPOINTS = "HeadPoints"
+BS_SUBVAR_HEADPOINTS_LOC = "Loc"
+BS_SUBVAR_HEADPOINTS_LABEL = "Label"
+BS_SUBVAR_HEADPOINTS_TYPE = "Type"
+BS_LABEL_NAS = "NAS"
+BS_LABEL_LPA = "LPA"
+BS_LABEL_RPA = "RPA"

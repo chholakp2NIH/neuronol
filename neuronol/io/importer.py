@@ -1,14 +1,26 @@
 import datetime as dt
 import json
 import re
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import mne
 import numpy as np
 import pandas as pd
 from scipy.interpolate import make_interp_spline
+from scipy.io import loadmat
 
 from neuronol.constants import (
+    BS_LABEL_LPA,
+    BS_LABEL_NAS,
+    BS_LABEL_RPA,
+    BS_SUBVAR_CHANNEL_LOC,
+    BS_SUBVAR_CHANNEL_NAME,
+    BS_SUBVAR_HEADPOINTS_LABEL,
+    BS_SUBVAR_HEADPOINTS_LOC,
+    BS_SUBVAR_HEADPOINTS_TYPE,
+    BS_VAR_CHANNEL,
+    BS_VAR_HEADPOINTS,
     EASYCAP_EEG_CHANNELS,
     IMOTIONS_BLINK_COL,
     IMOTIONS_BLINK_COL_POSITIVE_VALUE,
@@ -20,28 +32,32 @@ from neuronol.constants import (
 )
 
 
+@dataclass
 class Recording:
     fpath_import: Path
-    fpath_headcircum: Path
-    df_raw: pd.DataFrame
-    preamble: str
-    recording_dt: dt.datetime
-    eeg_col_nums: list[int]
-    df_eeg: pd.DataFrame
-    head_circum: float
-    head_radius: float
+    # fpath_headcircum: Path
+
+    df_raw: pd.DataFrame | None = None
+    preamble: str | None = None
+    recording_dt: dt.datetime | None = None
+    eeg_col_nums: list[int] | None = None
+    df_eeg: pd.DataFrame | None = None
+    head_circum: float | None = None
+    head_radius: float | None = None
+
     ecg_data_imported: bool | None = None
     blink_data_imported: bool | None = None
     event_markers_imported: bool | None = None
+
     blink_times: np.ndarray | None = None
     event_markers: pd.DataFrame | None = None
-    event_onsets: list[float] = []
-    event_descriptions: list[str] = []
-    raw: mne.io.RawArray
 
-    def __init__(self, fpath_import, fpath_headcircum) -> None:
-        self.fpath_import = fpath_import
-        self.fpath_headcircum = fpath_headcircum
+    # Using `field()` ensures new list is created each time a Recording obj is created
+    event_onsets: list[float] = field(default_factory=list)
+    event_descriptions: list[str] = field(default_factory=list)
+
+    raw: mne.io.RawArray | None = None
+    dig: mne.channels.DigMontage | None = None
 
 
 class DataImporter:
@@ -52,26 +68,37 @@ class DataImporter:
 
     def __init__(
         self,
-        fpath_import: Path,
-        fpath_headcircum: Path,
-        fpath_mne_raw: Path | None = None,
-        fpath_mne_report: Path | None = None,
+        fpath_import: Path | str,
+        fpath_mne_raw: Path | str | None = None,
+        fpath_mne_report: Path | str | None = None,
+        fpath_headcircum: Path | str | None = None,
         verbose: bool = True,
     ) -> None:
-        self.recording = Recording(fpath_import, fpath_headcircum)
+        self.recording = Recording(Path(fpath_import))
         self.verbose = verbose
-        if fpath_mne_raw and fpath_mne_raw is not None:
-            self.fpath_mne_raw = fpath_mne_raw
+        if fpath_mne_raw is not None:
+            self.fpath_mne_raw = Path(fpath_mne_raw)
             self.save_mne_raw = True
         else:
+            self.fpath_mne_raw = None
             self.save_mne_raw = False
-        if fpath_mne_report and fpath_mne_report is not None:
-            self.fpath_mne_report = fpath_mne_report
+        if fpath_mne_report is not None:
+            self.fpath_mne_report = Path(fpath_mne_report)
             self.create_mne_report = True
         else:
+            self.fpath_mne_report = None
             self.create_mne_report = False
+        self.fpath_headcircum = (
+            Path(fpath_headcircum) if fpath_headcircum is not None else None
+        )
 
-    def run(self, event_files: list[Path | str] | None = None):
+    def run(
+        self,
+        gnd_channel: str | None = None,
+        renamed_channels: list[str] | None = None,
+        event_files: list[Path | str] | None = None,
+        fpath_bs_dig: str | None = None,
+    ) -> None:
         """
         Run data import.
         """
@@ -84,23 +111,92 @@ class DataImporter:
         # Create MNE Raw from iMotions' exported CSV
         self.create_mne_raw_from_imotions_csv()
 
-        # Add events to Raw from Excel files
-        if event_files is not None:
-            for fpath in event_files:
-                self.add_event_markers_from_event_files_to_mne_raw(fpath)
-            self.recording.event_markers_imported = True
-            if self.create_mne_report:
-                events, event_id = mne.events_from_annotations(self.recording.raw)
-                self.report.add_events(
-                    events,
-                    f"Events: Event markers from file(s)",
-                    event_id=event_id,
-                    sfreq=self.recording.raw.info["sfreq"],
+        if isinstance(self.recording.raw, mne.io.RawArray):
+            # Add GND channel to MNE Raw (if needed)
+            if gnd_channel is not None:
+                mne.add_reference_channels(
+                    self.recording.raw, ref_channels=[gnd_channel], copy=False
                 )
 
-        # Save MNE Raw to disk
-        if self.save_mne_raw:
-            self.recording.raw.save(self.fpath_mne_raw, overwrite=True)
+            # Add digitized head points from BrainStorm (if needed)
+            if fpath_bs_dig is not None:
+                try:
+                    self.create_mne_montage_from_brainstorm_dig_data(
+                        fpath_bs_dig, renamed_channels=renamed_channels
+                    )
+                    self.recording.raw.set_montage(self.recording.dig)
+                    message = "Successfully imported digitized data."
+                except Exception as e:
+                    message = f"Could not import digitized data:\n{e}"
+                self._log_message(message)
+                if self.create_mne_report:
+                    self.report.add_html(title="Digitization data import", html=message)
+                    if isinstance(self.recording.dig, mne.channels.DigMontage):
+                        if self.fpath_headcircum is not None:
+                            self.evaluate_head_radius()
+                            # 2D Matplotlib plot
+                            try:
+                                message = f"Successfully read head radius and circumference from file."
+                            except Exception as e:
+                                message = f"Head radius and/or circumference could not be read from file:\n{e}"
+                            self._log_message(message)
+                            self.report.add_html(
+                                title="Head radius import", html=message
+                            )
+                            if self.recording.head_radius is not None:
+                                fig = self.recording.dig.plot(
+                                    sphere=self.recording.head_radius
+                                )  # 2D plot
+                                self.report.add_figure(
+                                    fig,
+                                    "2D Headshape Digitization",
+                                    section="EEG Shape and Headshape Digitization",
+                                )
+                        # 3D Matplotlib plot
+                        fig = self.recording.dig.plot(kind="3d")  # 3d plot
+                        self.report.add_figure(
+                            fig,
+                            "3D Headshape Digitization",
+                            section="EEG Shape and Headshape Digitization",
+                        )
+                        # 3D PyVista plot
+                        fig = mne.viz.plot_alignment(
+                            info=self.recording.raw.info,
+                            dig=True,
+                        )
+                        fig.plotter.camera.elevation = 20
+                        fig.plotter.camera.azimuth = 45
+                        self.report.add_figure(
+                            fig,
+                            "3D Headshape Digitization (in PyVista)",
+                            section="EEG Shape and Headshape Digitization",
+                        )
+
+            # Add events to Raw from Excel files
+            if not self.recording.event_markers_imported and event_files:
+                for fpath in event_files:
+                    self.add_event_markers_from_event_files_to_mne_raw(fpath)
+                self.recording.event_markers_imported = True
+                message = f"Successfully read event markers from file(s)."
+                self._log_message(message)
+                if self.create_mne_report:
+                    self.report.add_html(
+                        title="Event markers: from file(s)",
+                        section="Event markers import",
+                        html=message,
+                    )
+                    events, event_id = mne.events_from_annotations(self.recording.raw)
+                    self.report.add_events(
+                        events,
+                        f"Events: after including event markers read from file(s)",
+                        section="Events",
+                        event_id=event_id,
+                        sfreq=self.recording.raw.info["sfreq"],
+                    )
+
+            # Save MNE Raw to disk
+            if self.save_mne_raw:
+                self.recording.raw.save(self.fpath_mne_raw, overwrite=True)
 
         # Save MNE report (if created)
         if self.create_mne_report:
@@ -110,16 +206,6 @@ class DataImporter:
         """
         Main script to generate MNE Raw object from imported iMotions CSV.
         """
-
-        # Read head circumference and evaluate head radius
-        self.evaluate_head_radius()
-        message = (
-            f"Head circumference: {self.recording.head_circum * 100:0.1f}cm; "
-            + f"Head radius: {self.recording.head_radius:0.3f}m."
-        )
-        self._log_message(message)
-        if self.create_mne_report:
-            self.report.add_html(title="Head radius import", html=message)
 
         # Import raw data in CSV file and convert to a formatted dataframe
         self.read_imotions_data_as_df()
@@ -160,8 +246,10 @@ class DataImporter:
         # Extract blink times
         if IMOTIONS_BLINK_COL in self.recording.df_raw.columns:
             try:
-                self.extract_event_times_from_imotions_data(
-                    IMOTIONS_BLINK_COL, IMOTIONS_BLINK_COL_POSITIVE_VALUE
+                self.recording.blink_times = (
+                    self.extract_event_times_from_imotions_data(
+                        IMOTIONS_BLINK_COL, IMOTIONS_BLINK_COL_POSITIVE_VALUE
+                    )
                 )
                 self.recording.blink_data_imported = True
                 message = "Successfully imported blink data."
@@ -189,7 +277,11 @@ class DataImporter:
             message = f"Event marker column ('{IMOTIONS_MARKERS_COL}' not found in raw data from iMotions.)"
         self._log_message(message)
         if self.create_mne_report:
-            self.report.add_html(title="Event markers import", html=message)
+            self.report.add_html(
+                title="Event markers: from embedded triggers",
+                section="Event markers import",
+                html=message,
+            )
 
         # Convert EEG/ECG dataframe to MNE Raw object
         self.convert_electrophys_data_to_mne_raw_object()
@@ -199,11 +291,14 @@ class DataImporter:
         # Add blinks and/or event markers to MNE Raw as events/annotations
         if self.recording.blink_data_imported or self.recording.event_markers_imported:
             self.add_read_blinks_and_event_markers_to_mne_raw()
-            if self.create_mne_report:
+            if self.create_mne_report and isinstance(
+                self.recording.raw, mne.io.RawArray
+            ):
                 events, event_id = mne.events_from_annotations(self.recording.raw)
                 self.report.add_events(
                     events,
-                    "Events: blinks and/or event markers",
+                    "Events: read from embedded blinks and/or event markers",
+                    section="Events",
                     event_id=event_id,
                     sfreq=self.recording.raw.info["sfreq"],
                 )
@@ -214,7 +309,6 @@ class DataImporter:
         """
         self.read_imotions_data_as_df()
         self.read_imotions_csv_preamble()
-        return None
 
     def read_imotions_data_as_df(self) -> None:
         """
@@ -223,7 +317,6 @@ class DataImporter:
         self.recording.df_raw = pd.read_csv(
             self.recording.fpath_import, comment="#", low_memory=False
         )
-        return None
 
     def read_imotions_csv_preamble(self) -> None:
         """
@@ -233,21 +326,8 @@ class DataImporter:
             self.recording.preamble = "".join(
                 [line for line in f.readlines() if line.startswith("#")]
             )
-        return None
 
-    def evaluate_head_radius(self):
-        """
-        Reads head circumference (in meters) from file and calculates head radius.
-        """
-        with open(self.recording.fpath_headcircum, "r") as f:
-            content = json.load(f)
-        self.recording.head_circum = float(content["Value"])
-        self.recording.head_radius = self.recording.head_circum / (
-            2 * np.pi
-        )  # head circumference / 2π
-        return None
-
-    def get_recording_datetime_from_imotions_preamble(self):
+    def get_recording_datetime_from_imotions_preamble(self) -> None:
         """
         Find the date/time of the iMotions recording from the CSV preamble.
         """
@@ -269,9 +349,8 @@ class DataImporter:
             raise ValueError(
                 "(xx) Could not find recording date/time from iMotions preamble."
             )
-        return None
 
-    def get_eeg_data_column_numbers(self):
+    def get_eeg_data_column_numbers(self) -> None:
         """
         Use the iMotions CSV preamble to find the column numbers that contain
         EEG data.
@@ -282,7 +361,6 @@ class DataImporter:
                     i for i, w in enumerate(line.split(sep=",")) if w == "EEG"
                 ]
                 break
-        return None
 
     def extract_eeg_from_imotions_data(
         self,
@@ -324,7 +402,7 @@ class DataImporter:
         col_ecg: str = IMOTIONS_ECG_COL,
         col_timestamps: str = IMOTIONS_TIMESTAMP_COL,
         interp="linear",
-    ):
+    ) -> None:
         """
         Extracts ECG data from iMotions' raw data, then interpolates it
         using `interp` interpolation to match the timestamps for EEG data
@@ -350,7 +428,11 @@ class DataImporter:
         elif interp == "B-spline":
             bspl = make_interp_spline(ecg.index, ecg.values, k=3)  # B-spline cubic
             self.recording.df_eeg[col_ecg] = bspl(self.recording.df_eeg.index)
-        return None
+        else:
+            raise ValueError(
+                f"Unknown interpolation method: {interp}. "
+                "Use `linear` or `B-spline`."
+            )
 
     def extract_event_times_from_imotions_data(self, col_event, positive_val_event):
         """
@@ -359,13 +441,14 @@ class DataImporter:
         """
         df_event = self.recording.df_raw[[IMOTIONS_TIMESTAMP_COL, col_event]].copy()
         df_event = df_event[df_event[col_event] == positive_val_event]
-        blink_onsets = (
+        event_onsets = (
             df_event[IMOTIONS_TIMESTAMP_COL]
-            - self.recording.df_raw[IMOTIONS_TIMESTAMP_COL][0]
+            - self.recording.df_raw[IMOTIONS_TIMESTAMP_COL].iloc[0]
         ) / 1000  # in seconds
-        self.recording.blink_times = blink_onsets
-        self.recording.event_onsets += [w for w in blink_onsets]
-        self.recording.event_descriptions += ["blink"] * len(blink_onsets)
+        # self.recording.blink_times = blink_onsets
+        self.recording.event_onsets += [w for w in event_onsets]
+        self.recording.event_descriptions += [col_event] * len(event_onsets)
+        return event_onsets
 
     def read_event_markers_from_imotions_data(
         self,
@@ -400,7 +483,7 @@ class DataImporter:
             )
         ]
         t_0 = (
-            self.recording.df_raw[IMOTIONS_TIMESTAMP_COL][0] / 1000
+            self.recording.df_raw[IMOTIONS_TIMESTAMP_COL].iloc[0] / 1000
         )  # timestamp corres to start of imotions recording (in secs)
         df_markers["Times"] = df_markers["Timestamp_secs"] - t_0
         self.recording.event_markers = df_markers[["Times", IMOTIONS_MARKERS_COL]]
@@ -453,8 +536,6 @@ class DataImporter:
         event_onsets = [
             (dt - self.recording.recording_dt).total_seconds() for dt in event_datetimes
         ]
-        # self.recording.event_onsets += event_onsets
-        # self.recording.event_descriptions += event_descriptions
         annots = mne.Annotations(
             onset=event_onsets,
             duration=0,
@@ -463,6 +544,88 @@ class DataImporter:
         self.recording.raw.set_annotations(self.recording.raw.annotations + annots)
 
     # def read_event_times_from_task(self): ...
+
+    def create_mne_montage_from_brainstorm_dig_data(
+        self,
+        fpath_dig: str,
+        renamed_channels: list[str] | None = None,
+    ):
+        """
+        Reads Brainstorm Digitizer data (mat-file) to generate a MNE montage object.
+        """
+        # Load digitized data from file
+        data = loadmat(fpath_dig, simplify_cells=True)
+        # Extract channel, headshape, and fiducial locations
+        #   Channel locations
+        df_channels = pd.DataFrame(data[BS_VAR_CHANNEL])
+        if renamed_channels is not None:
+            df_channels[BS_SUBVAR_CHANNEL_NAME] = renamed_channels
+        ch_pos = {
+            u: v
+            for (u, v) in df_channels[
+                [BS_SUBVAR_CHANNEL_NAME, BS_SUBVAR_CHANNEL_LOC]
+            ].to_numpy()
+        }
+        #   Head shape and fiducial points
+        df_headpoints = pd.concat(
+            [
+                pd.DataFrame(
+                    data[BS_VAR_HEADPOINTS][BS_SUBVAR_HEADPOINTS_LOC].T,
+                    columns=["X", "Y", "Z"],
+                ),
+                pd.DataFrame(
+                    data[BS_VAR_HEADPOINTS][BS_SUBVAR_HEADPOINTS_LABEL],
+                    columns=["Label"],
+                ),
+                pd.DataFrame(
+                    data[BS_VAR_HEADPOINTS][BS_SUBVAR_HEADPOINTS_TYPE], columns=["Type"]
+                ),
+            ],
+            axis=1,
+        )
+        df_headpoints["Label"] = df_headpoints["Label"].apply(
+            lambda x: "HSP" if isinstance(x, np.ndarray) and x.size == 0 else x
+        )  # change label from empty np array to "HSP" for headshape points
+        nasion = (
+            df_headpoints.loc[df_headpoints["Label"] == BS_LABEL_NAS, ["X", "Y", "Z"]]
+            .mean()
+            .to_numpy()
+        )
+        lpa = (
+            df_headpoints.loc[df_headpoints["Label"] == BS_LABEL_LPA, ["X", "Y", "Z"]]
+            .mean()
+            .to_numpy()
+        )
+        rpa = (
+            df_headpoints.loc[df_headpoints["Label"] == BS_LABEL_RPA, ["X", "Y", "Z"]]
+            .mean()
+            .to_numpy()
+        )
+        hsp = df_headpoints.loc[
+            df_headpoints["Label"] == "HSP", ["X", "Y", "Z"]
+        ].to_numpy()
+
+        # Create MNE Montage
+        dig = mne.channels.make_dig_montage(
+            ch_pos=ch_pos,
+            nasion=nasion,
+            lpa=lpa,
+            rpa=rpa,
+            hsp=hsp,
+            coord_frame="unknown",
+        )
+        self.recording.dig = mne.channels.transform_to_head(dig)
+
+    def evaluate_head_radius(self) -> None:
+        """
+        Reads head circumference (in meters) from file and calculates head radius.
+        """
+        with open(self.fpath_headcircum, "r") as f:
+            content = json.load(f)
+        self.recording.head_circum = float(content["Value"])
+        self.recording.head_radius = self.recording.head_circum / (
+            2 * np.pi
+        )  # head circumference / 2π
 
     def _log_message(self, message: str | Exception):
         """
