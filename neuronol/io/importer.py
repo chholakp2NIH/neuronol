@@ -34,8 +34,11 @@ from neuronol.constants import (
 
 @dataclass
 class Recording:
+    """
+    A class representing an iMotions' recording and collected data therein.
+    """
+
     fpath_import: Path
-    # fpath_headcircum: Path
 
     df_raw: pd.DataFrame | None = None
     preamble: str | None = None
@@ -72,10 +75,13 @@ class DataImporter:
         fpath_mne_raw: Path | str | None = None,
         fpath_mne_report: Path | str | None = None,
         fpath_headcircum: Path | str | None = None,
+        fpath_bs_dig: Path | str | None = None,
+        event_files: list[Path | str] | None = None,
+        gnd_channel: str | None = None,
+        renamed_channels: list[str] | None = None,
         verbose: bool = True,
     ) -> None:
         self.recording = Recording(Path(fpath_import))
-        self.verbose = verbose
         if fpath_mne_raw is not None:
             self.fpath_mne_raw = Path(fpath_mne_raw)
             self.save_mne_raw = True
@@ -91,14 +97,15 @@ class DataImporter:
         self.fpath_headcircum = (
             Path(fpath_headcircum) if fpath_headcircum is not None else None
         )
+        self.fpath_bs_dig = Path(fpath_bs_dig) if fpath_bs_dig is not None else None
+        self.event_files = (
+            [Path(w) for w in event_files] if event_files is not None else None
+        )
+        self.gnd_channel = gnd_channel
+        self.renamed_channels = renamed_channels
+        self.verbose = verbose
 
-    def run(
-        self,
-        gnd_channel: str | None = None,
-        renamed_channels: list[str] | None = None,
-        event_files: list[Path | str] | None = None,
-        fpath_bs_dig: str | None = None,
-    ) -> None:
+    def run(self) -> None:
         """
         Run data import.
         """
@@ -113,16 +120,16 @@ class DataImporter:
 
         if isinstance(self.recording.raw, mne.io.RawArray):
             # Add GND channel to MNE Raw (if needed)
-            if gnd_channel is not None:
+            if self.gnd_channel is not None:
                 mne.add_reference_channels(
-                    self.recording.raw, ref_channels=[gnd_channel], copy=False
+                    self.recording.raw, ref_channels=[self.gnd_channel], copy=False
                 )
 
             # Add digitized head points from BrainStorm (if needed)
-            if fpath_bs_dig is not None:
+            if self.fpath_bs_dig is not None:
                 try:
                     self.create_mne_montage_from_brainstorm_dig_data(
-                        fpath_bs_dig, renamed_channels=renamed_channels
+                        self.fpath_bs_dig, renamed_channels=self.renamed_channels
                     )
                     self.recording.raw.set_montage(self.recording.dig)
                     message = "Successfully imported digitized data."
@@ -173,8 +180,8 @@ class DataImporter:
                         )
 
             # Add events to Raw from Excel files
-            if not self.recording.event_markers_imported and event_files:
-                for fpath in event_files:
+            if not self.recording.event_markers_imported and self.event_files:
+                for fpath in self.event_files:
                     self.add_event_markers_from_event_files_to_mne_raw(fpath)
                 self.recording.event_markers_imported = True
                 message = f"Successfully read event markers from file(s)."
@@ -521,7 +528,7 @@ class DataImporter:
         self.recording.raw.set_annotations(self.recording.raw.annotations + annots)
 
     def add_event_markers_from_event_files_to_mne_raw(
-        self, fpath_event_markers_file: Path | str
+        self, fpath_event_markers_file: Path
     ):
         """
         Read event markers from Excel, with columns:
@@ -547,14 +554,14 @@ class DataImporter:
 
     def create_mne_montage_from_brainstorm_dig_data(
         self,
-        fpath_dig: str,
+        fpath_dig: Path,
         renamed_channels: list[str] | None = None,
     ):
         """
         Reads Brainstorm Digitizer data (mat-file) to generate a MNE montage object.
         """
         # Load digitized data from file
-        data = loadmat(fpath_dig, simplify_cells=True)
+        data = loadmat(str(fpath_dig), simplify_cells=True)
         # Extract channel, headshape, and fiducial locations
         #   Channel locations
         df_channels = pd.DataFrame(data[BS_VAR_CHANNEL])

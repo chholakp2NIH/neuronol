@@ -128,90 +128,59 @@ def fpath_headcircum():
     return value
 
 
-# Run full data import (with embedded triggers)
-def test_run_with_embedded_triggers(
-    fpath_eeg_csv_long,
-    fpath_mne_raw_long,
-    fpath_mne_report_long,
+# Run full data import (without embedded triggers)
+def test_run_full(
+    fpath_eeg_csv,
+    fpath_mne_raw,
+    fpath_mne_report,
     fpath_dig,
+    fpath_restingstate_stimtimes,
 ):
-    if Path(fpath_mne_raw_long).exists():
-        Path(fpath_mne_raw_long).unlink()
-    if Path(fpath_mne_report_long).exists():
-        Path(fpath_mne_report_long).unlink()
+    if Path(fpath_mne_raw).exists():
+        Path(fpath_mne_raw).unlink()
+    if Path(fpath_mne_report).exists():
+        Path(fpath_mne_report).unlink()
     data_importer = DataImporter(
-        fpath_eeg_csv_long,
-        fpath_mne_raw=fpath_mne_raw_long,
-        fpath_mne_report=fpath_mne_report_long,
-    )
-    data_importer.run(
+        fpath_eeg_csv,
+        fpath_mne_raw=fpath_mne_raw,
+        fpath_mne_report=fpath_mne_report,
+        fpath_bs_dig=fpath_dig,
+        event_files=[fpath_restingstate_stimtimes],
         gnd_channel="GND",
         renamed_channels=EASYCAP_EEG_CHANNELS + ["GND"],
-        fpath_bs_dig=fpath_dig,
     )
+    data_importer.run()
     assert isinstance(data_importer.recording.raw, mne.io.RawArray)
-    assert Path(fpath_mne_raw_long).exists()
-    assert Path(fpath_mne_report_long).exists()
+    assert Path(fpath_mne_raw).exists()
+    assert Path(fpath_mne_report).exists()
     assert IMOTIONS_BLINK_COL in data_importer.recording.raw.annotations.description
     assert "GND" in data_importer.recording.raw.ch_names
     assert data_importer.recording.raw.get_montage() == data_importer.recording.dig
+    assert "trials-start" in data_importer.recording.raw.annotations.description
 
 
-# Run full data import (without embedded triggers)
+# Run data import (with embedded triggers)
+def test_run_with_embedded_triggers(
+    fpath_eeg_csv_long,
+):
+    data_importer = DataImporter(
+        fpath_eeg_csv_long,
+    )
+    data_importer.run()
+    assert "trials-start" in data_importer.recording.raw.annotations.description
+
+
+# Run data import (without embedded triggers)
 def test_run_without_embedded_triggers(
     fpath_eeg_csv,
     fpath_restingstate_stimtimes,
 ):
     # Test MNE Report and MNE Raw creation (in a file with embedded triggers)
     data_importer = DataImporter(
-        fpath_eeg_csv,
+        fpath_eeg_csv, event_files=[fpath_restingstate_stimtimes]
     )
-    data_importer.run(event_files=[fpath_restingstate_stimtimes])
+    data_importer.run()
     assert "trials-start" in data_importer.recording.raw.annotations.description
-
-
-# # Run full data import
-# def test_run(
-#     fpath_eeg_csv_long,
-#     fpath_headcircum,
-#     fpath_mne_raw_long,
-#     fpath_mne_report_long,
-#     fpath_eeg_csv,
-#     fpath_restingstate_stimtimes,
-#     fpath_dig,
-# ):
-#     # Test MNE Report and MNE Raw creation (in a file with embedded triggers)
-#     data_importer = DataImporter(
-#         fpath_eeg_csv_long,
-#         fpath_headcircum,
-#         fpath_mne_raw=fpath_mne_raw_long,
-#         fpath_mne_report=fpath_mne_report_long,
-#     )
-#     if data_importer.fpath_mne_raw.exists():
-#         data_importer.fpath_mne_raw.unlink()
-#     if data_importer.fpath_mne_report.exists():
-#         data_importer.fpath_mne_report.unlink()
-#     data_importer.run()
-#     assert isinstance(data_importer.recording.raw, mne.io.RawArray)
-#     assert Path(fpath_mne_raw_long).exists()
-#     assert data_importer.fpath_mne_report.exists()
-#     # Test events read from file(s) when embedded triggers are missing
-#     data_importer = DataImporter(fpath_eeg_csv, fpath_headcircum)
-#     data_importer.run(event_files=[fpath_restingstate_stimtimes])
-#     assert "trials-start" in data_importer.recording.raw.annotations.description
-#     # Test adding GND channel to Raw
-#     data_importer = DataImporter(fpath_eeg_csv, fpath_headcircum)
-#     data_importer.run(gnd_channel="GND")
-#     assert "GND" in data_importer.recording.raw.ch_names
-#     # Test adding BrainStorm digitization
-#     data_importer = DataImporter(fpath_eeg_csv, fpath_headcircum)
-#     data_importer.run(
-#         gnd_channel="GND",
-#         renamed_channels=EASYCAP_EEG_CHANNELS + ["GND"],
-#         fpath_bs_dig=fpath_dig,
-#     )
-#     assert isinstance(data_importer.recording.dig, mne.channels.DigMontage)
-#     assert data_importer.recording.raw.get_montage() == data_importer.recording.dig
 
 
 # Create MNE raw from iMotions CSV
