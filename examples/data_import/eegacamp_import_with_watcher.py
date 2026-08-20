@@ -25,7 +25,11 @@ def import_eegacamp_data(recording_data_dir):
 
 
 # Given
-data_dir = Path(os.path.expanduser("~/data/bids/imotions-sample/"))
+data_dir = Path(
+    os.environ.get(
+        "EXAMPLE_DATA_DIR", os.path.expanduser("~/data/bids/imotions-sample/")
+    )
+)
 
 # Create data watcher and start scouting
 watcher = DataWatcher(data_dir)

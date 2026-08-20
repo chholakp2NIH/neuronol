@@ -1,0 +1,11 @@
+services:
+  auto-data-importer:
+    container_name: "auto-data-importer"
+    build:
+      context: ../..
+      dockerfile: examples/data_import/Dockerfile
+    restart: unless-stopped
+    environment:
+      EXAMPLE_DATA_DIR: /data
+    volumes:
+      - ${HOME}/data/bids/imotions-sample:/data
