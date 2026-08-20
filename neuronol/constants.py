@@ -6,6 +6,9 @@ IMOTIONS_MARKERS_COL = "Description"
 T_WIN_NO_DUPL_MARKERS = 1  # time window in which no duplicate markers are expected
 SFREQ = 1000
 
+# Watcher
+WATCHER_DATA_COPY_COMPLETED = ".data_collection_completed"
+
 # Easycap channel names
 EASYCAP_EEG_CHANNELS = [
     "Fp1",

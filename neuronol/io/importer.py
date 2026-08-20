@@ -79,6 +79,7 @@ class DataImporter:
         event_files: list[Path | str] | None = None,
         gnd_channel: str | None = None,
         renamed_channels: list[str] | None = None,
+        include_3d_plots: bool = False,
         verbose: bool = True,
     ) -> None:
         self.recording = Recording(Path(fpath_import))
@@ -103,6 +104,7 @@ class DataImporter:
         )
         self.gnd_channel = gnd_channel
         self.renamed_channels = renamed_channels
+        self.include_3d_plots = include_3d_plots
         self.verbose = verbose
 
     def run(self) -> None:
@@ -159,25 +161,26 @@ class DataImporter:
                                     "2D Headshape Digitization",
                                     section="EEG Shape and Headshape Digitization",
                                 )
-                        # 3D Matplotlib plot
-                        fig = self.recording.dig.plot(kind="3d")  # 3d plot
-                        self.report.add_figure(
-                            fig,
-                            "3D Headshape Digitization",
-                            section="EEG Shape and Headshape Digitization",
-                        )
-                        # 3D PyVista plot
-                        fig = mne.viz.plot_alignment(
-                            info=self.recording.raw.info,
-                            dig=True,
-                        )
-                        fig.plotter.camera.elevation = 20
-                        fig.plotter.camera.azimuth = 45
-                        self.report.add_figure(
-                            fig,
-                            "3D Headshape Digitization (in PyVista)",
-                            section="EEG Shape and Headshape Digitization",
-                        )
+                        if self.include_3d_plots:
+                            # 3D Matplotlib plot
+                            fig = self.recording.dig.plot(kind="3d")  # 3d plot
+                            self.report.add_figure(
+                                fig,
+                                "3D Headshape Digitization",
+                                section="EEG Shape and Headshape Digitization",
+                            )
+                            # 3D PyVista plot
+                            fig = mne.viz.plot_alignment(
+                                info=self.recording.raw.info,
+                                dig=True,
+                            )
+                            fig.plotter.camera.elevation = 20
+                            fig.plotter.camera.azimuth = 45
+                            self.report.add_figure(
+                                fig,
+                                "3D Headshape Digitization (in PyVista)",
+                                section="EEG Shape and Headshape Digitization",
+                            )
 
             # Add events to Raw from Excel files
             if not self.recording.event_markers_imported and self.event_files:
