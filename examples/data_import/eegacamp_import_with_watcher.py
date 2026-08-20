@@ -32,9 +32,9 @@ watcher = DataWatcher(data_dir)
 watcher.observer.start()
 try:
     while True:
+        time.sleep(1)
         recording_data_dir = watcher.event_handler.queue.get()
         import_eegacamp_data(recording_data_dir)
-        time.sleep(1)
 finally:
     watcher.observer.stop()
     watcher.observer.join()
