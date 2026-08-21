@@ -107,5 +107,5 @@ def test_example_integration(
     watcher.observer.stop()
     watcher.observer.join()
     # Assertions
-    assert bids_fpaths["fpath_mne_raw"].exists()
-    assert bids_fpaths["fpath_mne_report"].exists()
+    assert Path(fpath_mne_raw).exists()
+    assert Path(fpath_mne_report).exists()

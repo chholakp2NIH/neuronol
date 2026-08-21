@@ -7,5 +7,6 @@ services:
     restart: unless-stopped
     environment:
       EXAMPLE_DATA_DIR: /data
+      TZ: America/New_York
     volumes:
       - ${HOME}/data/bids/imotions-sample:/data
