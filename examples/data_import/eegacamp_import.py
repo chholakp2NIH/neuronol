@@ -1,34 +1,23 @@
-import os
 from pathlib import Path
 
 from neuronol.constants import EASYCAP_EEG_CHANNELS
 from neuronol.io.importer import DataImporter
+from neuronol.utilities import create_bids_file_paths_for_eegacamp_recording
 
 # Given
-data_root = Path(os.path.expanduser("~/data/bids/imotions-sample/"))
-fpath_import = data_root / Path("sub-xx/ses-studyvisit2/eeg/sub-xx_task-all_eeg.csv")
-fpath_mne_raw = data_root / Path("sub-xx/ses-studyvisit2/eeg/sub-xx_task-all_eeg.fif")
-fpath_mne_report = data_root / Path(
-    "sub-xx/ses-studyvisit2/eeg/sub-xx_task-all_importreport.html"
-)
-fpath_headcircum = data_root / Path(
-    "sub-xx/ses-studyvisit2/eeg/sub-xx_desc-manual_headcircumference.json"
-)
-fpath_dig = data_root / Path(
-    "sub-xx/ses-studyvisit2/eeg/sub-xx_task-all_acq-polhemus_headshape.mat"
-)
-fpath_restingstate_stimtimes = data_root / Path(
-    "sub-xx/ses-studyvisit2/eeg/sub-xx_task-restingstate_eventsstimtimes.xlsx"
+recording_data_dir = (
+    Path.home() / "data/bids/imotions-sample" / "sub-xx/ses-studyvisit2/eeg/"
 )
 
 # Read data and display
+bids_fpaths = create_bids_file_paths_for_eegacamp_recording(recording_data_dir)
 data_importer = DataImporter(
-    fpath_import,
-    fpath_mne_raw=fpath_mne_raw,
-    fpath_mne_report=fpath_mne_report,
-    fpath_headcircum=fpath_headcircum,
-    fpath_bs_dig=fpath_dig,
-    event_files=[fpath_restingstate_stimtimes],
+    bids_fpaths["fpath_import"],
+    fpath_mne_raw=bids_fpaths["fpath_mne_raw"],
+    fpath_mne_report=bids_fpaths["fpath_mne_report"],
+    fpath_headcircum=bids_fpaths["fpath_headcircum"],
+    fpath_bs_dig=bids_fpaths["fpath_bs_dig"],
+    event_files=bids_fpaths["event_files"],
     gnd_channel="GND",
     renamed_channels=EASYCAP_EEG_CHANNELS + ["GND"],
     verbose=True,

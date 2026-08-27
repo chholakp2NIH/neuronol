@@ -56,3 +56,11 @@ BS_SUBVAR_HEADPOINTS_TYPE = "Type"
 BS_LABEL_NAS = "NAS"
 BS_LABEL_LPA = "LPA"
 BS_LABEL_RPA = "RPA"
+
+# Sqlite DB
+DEFAULT_DB_INIT_SCRIPT = """
+PRAGMA foreign_keys = ON;
+CREATE TABLE participants (
+    sub_id PRIMARY_KEY
+);
+"""  # default db init script
