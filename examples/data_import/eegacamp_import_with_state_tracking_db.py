@@ -1,6 +1,7 @@
+import sqlite3
 from pathlib import Path
 
-from neuronol.constants import EASYCAP_EEG_CHANNELS
+from neuronol.constants import DEFAULT_DB_INIT_SCRIPT, EASYCAP_EEG_CHANNELS
 from neuronol.io.dbmanager import DBManager
 from neuronol.io.importer import DataImporter
 from neuronol.utilities import (
@@ -15,10 +16,16 @@ recording_data_dir = (
 fpath_db = Path.home() / "data/bids/imotions-sample" / "derivatives/imaging.db"
 
 # Prepare db
-# db_manager = DBManager(fpath_db, initialize_db=True)
-db_manager = DBManager(fpath_db)
+if fpath_db.exists():
+    fpath_db.unlink()
+db_init_script = (
+    DEFAULT_DB_INIT_SCRIPT
+    + "INSERT INTO participants (sub_id) VALUES ('sub-01'), ('sub-02'), ('sub-03');"
+)
+db_manager = DBManager(fpath_db, initialize_db=True, db_init_script=db_init_script)
 rows = db_manager.run_sql_query("SELECT * FROM participants;")
 print(rows)
+print()
 
 # # Read data and display
 # bids_fpaths = create_bids_file_paths_for_eegacamp_recording(recording_data_dir)
