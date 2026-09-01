@@ -1,5 +1,6 @@
 import sqlite3
 from pathlib import Path
+from typing import Literal
 
 import pandas as pd
 
@@ -51,38 +52,56 @@ class DBManager:
         return cur.fetchall()
 
     # Read col values from table
-    def read_col_from_table(self, table_name, col_name, return_id=None):
+    def read_col_values_from_table(
+        self, table_name, col_name, return_id=None, id_col="ID"
+    ):
         """
         Read all values under `col_name` from `table_name`.
         """
         cur = self.conn.cursor()
         cur.execute(f"SELECT * FROM {table_name}")
         if return_id and return_id is not None:
-            return [(r["ID"], r[col_name]) for r in cur.fetchall()]
+            return [(r[id_col], r[col_name]) for r in cur.fetchall()]
         return [r[col_name] for r in cur.fetchall()]
 
-    # Convert table to df
-    def export_table_as_df(self, table_name):
+    # Write col values to table
+    def add_row_to_table(
+        self,
+        table_name,
+        col_names: tuple[str],
+        values: list[tuple],
+    ):
         """
-        Export db table as a DataFrame.
+        Add row(s) of data under list column names to table.
+        """
+        cur = self.conn.cursor()
+        placeholders = ", ".join(["?"] * len(col_names))
+        columns = ", ".join(col_names)
+        script = f"""
+        INSERT INTO {table_name} ({columns}) VALUES ({placeholders})
+        """
+        cur.executemany(script, values)
+        self.conn.commit()
+
+    # Convert table to df
+    def import_table_as_df(self, table_name: str):
+        """
+        Import db table as a DataFrame.
         """
         return pd.read_sql_query(f"SELECT * FROM {table_name};", self.conn)
 
-    # # Create new table from df
-    # def create_table_from_df(self, df: pd.DataFrame, table_name):
-    #     """
-    #     Create DB table from DataFrame `df`.
-    #     """
-    #     # Create empty table
-    #     col_names = tuple(w for w in df.columns)
-    #     col_names = ("ID",) + col_names
-    #     cur = self.conn.cursor()
-    #     cur.executescript(f"CREATE TABLE {table_name} {col_names};")
-    #     # Get col values row-by-row and insert into table
-    #     for ind, row in df.iterrows():
-    #         cur.execute(
-    #             f"INSERT INTO {table_name} {col_names} VALUES ({', '.join(['?'] * len(col_names))})",
-    #             tuple([ind] + row.to_list()),
-    #         )
-    #     # Commit changes to db
-    #     self.conn.commit()
+    # Convert df to table
+    def export_df_as_table(
+        self,
+        df: pd.DataFrame,
+        table_name: str,
+        if_exists: Literal["fail", "replace", "append"] = "fail",
+        index: bool = False,
+        **kwargs,
+    ):
+        """
+        Export pandas DataFrame as db table.
+        """
+        return df.to_sql(
+            table_name, self.conn, if_exists=if_exists, index=index, **kwargs
+        )
