@@ -48,7 +48,6 @@ class DBManager:
         """
         cur = self.conn.cursor()
         cur.execute(query)
-        # return [r[0:] for r in cur.fetchall()]
         return cur.fetchall()
 
     # Read col values from table
@@ -64,7 +63,7 @@ class DBManager:
             return [(r[id_col], r[col_name]) for r in cur.fetchall()]
         return [r[col_name] for r in cur.fetchall()]
 
-    # Write col values to table
+    # Add new data row(s) to table
     def add_row_to_table(
         self,
         table_name,
