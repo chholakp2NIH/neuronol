@@ -8,8 +8,8 @@ COPY neuronol ./neuronol
 RUN python -m pip install --no-cache-dir .
 
 # Copy the paired python example script
-COPY examples/data_import/eegacamp_import_with_watcher.py ./examples/data_import/eegacamp_import_with_watcher.py
+COPY examples/data_import/watcher/eegacamp_import_with_watcher.py ./examples/data_import/watcher/eegacamp_import_with_watcher.py
 
 # Change working dir to the example script dir and run script
-WORKDIR /app/examples/data_import
+WORKDIR /app/examples/data_import/watcher
 CMD ["python", "./eegacamp_import_with_watcher.py"]

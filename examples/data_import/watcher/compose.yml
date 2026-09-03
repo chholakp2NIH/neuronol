@@ -1,9 +1,9 @@
 services:
   auto-data-importer:
-    container_name: "auto-data-importer"
+    container_name: "neuronol-auto-data-importer"
     build:
-      context: ../..
-      dockerfile: examples/data_import/Dockerfile
+      context: ../../..
+      dockerfile: examples/data_import/watcher/Dockerfile
     restart: unless-stopped
     environment:
       EXAMPLE_DATA_DIR: /data
