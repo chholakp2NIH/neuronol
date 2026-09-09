@@ -13,6 +13,7 @@ from scipy.io import loadmat
 from neuronol.constants import (
     BS_LABEL_LPA,
     BS_LABEL_NAS,
+    BS_LABEL_NAS_ALTERNATIVE,
     BS_LABEL_RPA,
     BS_SUBVAR_CHANNEL_LOC,
     BS_SUBVAR_CHANNEL_NAME,
@@ -596,8 +597,19 @@ class DataImporter:
         df_headpoints["Label"] = df_headpoints["Label"].apply(
             lambda x: "HSP" if isinstance(x, np.ndarray) and x.size == 0 else x
         )  # change label from empty np array to "HSP" for headshape points
+        #   - Determine whether BS used "NAS" or "NA" to label Nasion
+        if BS_LABEL_NAS in df_headpoints["Label"].values:
+            brainstorm_label_nasion = BS_LABEL_NAS
+        elif BS_LABEL_NAS_ALTERNATIVE in df_headpoints["Label"].values:
+            brainstorm_label_nasion = BS_LABEL_NAS_ALTERNATIVE
+        else:
+            raise ValueError(
+                f"(xx) Could not find label for Nasion in Brainstorm's digitization data"
+            )
         nasion = (
-            df_headpoints.loc[df_headpoints["Label"] == BS_LABEL_NAS, ["X", "Y", "Z"]]
+            df_headpoints.loc[
+                df_headpoints["Label"] == brainstorm_label_nasion, ["X", "Y", "Z"]
+            ]
             .mean()
             .to_numpy()
         )

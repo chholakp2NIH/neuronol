@@ -20,6 +20,7 @@ from neuronol.io.importer import DataImporter
 load_dotenv()
 
 
+# Sub-xx
 @pytest.fixture
 def fpath_eeg_csv():
     value = os.getenv("EEG_CSV_IMOTIONS")
@@ -63,6 +64,7 @@ def fpath_dig():
     return value
 
 
+# Sub-x3
 @pytest.fixture
 def fpath_eeg_csv_trigs():
     value = os.getenv("EEG_CSV_IMOTIONS_TRIGS")
@@ -92,6 +94,7 @@ def model_events_sequence_trigs():
     return df_events["Event"]
 
 
+# Sub-x1
 @pytest.fixture
 def fpath_eeg_csv_long():
     value = os.getenv("EEG_CSV_IMOTIONS_LONG")
@@ -121,6 +124,15 @@ def model_events_sequence_long():
     return df_events["Event"]
 
 
+# Sub-yy
+@pytest.fixture
+def fpath_dig_alt_nasion():
+    value = os.getenv("FPATH_DIG_ALT_NASION")
+    assert value is not None
+    return value
+
+
+# Misc
 @pytest.fixture
 def fpath_headcircum():
     value = os.getenv("HEADCIRCUM_JSON")
@@ -345,19 +357,24 @@ def test_add_event_markers_from_event_files_to_mne_raw(
     assert len(data_importer.recording.raw.annotations) > 0
 
 
-#
-def test_create_mne_montage_from_brainstorm_dig_data(fpath_eeg_csv, fpath_dig):
-    data_importer = DataImporter(fpath_eeg_csv)
+# Create MNE dig montage from Brainstorm dig data
+def test_create_mne_montage_from_brainstorm_dig_data(
+    tmp_path, fpath_dig, fpath_dig_alt_nasion
+):
+    data_importer = DataImporter(tmp_path)
     data_importer.create_mne_montage_from_brainstorm_dig_data(fpath_dig)
     assert isinstance(data_importer.recording.dig, mne.channels.DigMontage)
     embedded_ch_names_in_dig = data_importer.recording.dig.ch_names
-    data_importer = DataImporter(fpath_eeg_csv)
+    data_importer = DataImporter(tmp_path)
     data_importer.create_mne_montage_from_brainstorm_dig_data(
         fpath_dig, renamed_channels=EASYCAP_EEG_CHANNELS + ["GND"]
     )
     renamed_ch_names_in_dig = data_importer.recording.dig.ch_names
     assert not (renamed_ch_names_in_dig == embedded_ch_names_in_dig)
     assert renamed_ch_names_in_dig == EASYCAP_EEG_CHANNELS + ["GND"]
+    data_importer = DataImporter(tmp_path)
+    data_importer.create_mne_montage_from_brainstorm_dig_data(fpath_dig_alt_nasion)
+    assert isinstance(data_importer.recording.dig, mne.channels.DigMontage)
 
 
 # Log message
