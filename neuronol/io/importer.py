@@ -257,10 +257,8 @@ class DataImporter:
         # Extract blink times
         if IMOTIONS_BLINK_COL in self.recording.df_raw.columns:
             try:
-                self.recording.blink_times = (
-                    self.extract_event_times_from_imotions_data(
-                        IMOTIONS_BLINK_COL, IMOTIONS_BLINK_COL_POSITIVE_VALUE
-                    )
+                self.extract_event_times_from_imotions_data(
+                    IMOTIONS_BLINK_COL, IMOTIONS_BLINK_COL_POSITIVE_VALUE
                 )
                 self.recording.blink_data_imported = True
                 message = "Successfully imported blink data."
@@ -452,14 +450,15 @@ class DataImporter:
         """
         df_event = self.recording.df_raw[[IMOTIONS_TIMESTAMP_COL, col_event]].copy()
         df_event = df_event[df_event[col_event] == positive_val_event]
-        event_onsets = (
-            df_event[IMOTIONS_TIMESTAMP_COL]
-            - self.recording.df_raw[IMOTIONS_TIMESTAMP_COL].iloc[0]
-        ) / 1000  # in seconds
-        # self.recording.blink_times = blink_onsets
-        self.recording.event_onsets += [w for w in event_onsets]
-        self.recording.event_descriptions += [col_event] * len(event_onsets)
-        return event_onsets
+        if df_event.dropna().empty:
+            raise ValueError(f"No positive instance found for event: {col_event}")
+        else:
+            event_onsets = (
+                df_event[IMOTIONS_TIMESTAMP_COL]
+                - self.recording.df_raw[IMOTIONS_TIMESTAMP_COL].iloc[0]
+            ) / 1000  # in seconds
+            self.recording.event_onsets += [w for w in event_onsets]
+            self.recording.event_descriptions += [col_event] * len(event_onsets)
 
     def read_event_markers_from_imotions_data(
         self,

@@ -132,6 +132,13 @@ def fpath_dig_alt_nasion():
     return value
 
 
+@pytest.fixture
+def fpath_eeg_csv_no_blinks():
+    value = os.getenv("EEG_CSV_IMOTIONS_NO_BLINKS")
+    assert value is not None
+    return value
+
+
 # Misc
 @pytest.fixture
 def fpath_headcircum():
@@ -289,9 +296,7 @@ def test_add_interpolated_ecg_to_eeg(
 
 
 # Extract blink times from iMotions' data
-def test_extract_event_times_from_imotions_data(
-    fpath_eeg_csv,
-):
+def test_extract_event_times_from_imotions_data(fpath_eeg_csv, fpath_eeg_csv_no_blinks):
     data_importer = DataImporter(fpath_eeg_csv)
     data_importer.read_imotions_csv_full()
     data_importer.extract_event_times_from_imotions_data(
@@ -307,6 +312,14 @@ def test_extract_event_times_from_imotions_data(
         )
         > 0
     )
+    data_importer = DataImporter(fpath_eeg_csv_no_blinks)
+    data_importer.read_imotions_csv_full()
+    with pytest.raises(
+        ValueError, match=f"No positive instance found for event: {IMOTIONS_BLINK_COL}"
+    ):
+        data_importer.extract_event_times_from_imotions_data(
+            IMOTIONS_BLINK_COL, IMOTIONS_BLINK_COL_POSITIVE_VALUE
+        )
 
 
 # Extract event triggers from iMotions' data
