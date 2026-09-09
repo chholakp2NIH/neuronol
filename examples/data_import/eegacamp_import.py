@@ -1,12 +1,16 @@
 from pathlib import Path
 
+from _eegacamp import create_bids_file_paths_for_eegacamp_recording
+
 from neuronol.constants import EASYCAP_EEG_CHANNELS
 from neuronol.io.importer import DataImporter
-from neuronol.utilities import create_bids_file_paths_for_eegacamp_recording
 
 # Given
 recording_data_dir = (
-    Path.home() / "data/bids/imotions-sample" / "sub-xx/ses-studyvisit2/eeg/"
+    # Path.home() / "data/bids/imotions-sample" / "sub-xx/ses-studyvisit2/eeg/"
+    Path.home()
+    / "data/bids/eegacamp-test"
+    / "sub-006/ses-studyvisit4/eeg/"
 )
 
 # Read data and display
