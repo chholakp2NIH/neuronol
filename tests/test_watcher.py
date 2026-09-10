@@ -1,45 +1,12 @@
-import os
 from pathlib import Path
 
-import pytest
-from dotenv import load_dotenv
 from watchdog.events import FileSystemEvent
 from watchdog.observers.api import BaseObserver
 
 from neuronol.constants import EASYCAP_EEG_CHANNELS, WATCHER_DATA_COPY_COMPLETED
 from neuronol.io.importer import DataImporter
 from neuronol.io.watcher import DataEventHandler, DataWatcher
-from neuronol.utilities import create_bids_file_paths_for_eegacamp_recording
-
-load_dotenv()
-
-
-@pytest.fixture
-def data_dir():
-    value = os.getenv("DATA_DIR")
-    assert value is not None
-    return value
-
-
-@pytest.fixture
-def fpath_data_completion_flag():
-    value = os.getenv("FPATH_DATA_COMPLETION_FLAG")
-    assert value is not None
-    return value
-
-
-@pytest.fixture
-def fpath_mne_report():
-    value = os.getenv("FPATH_MNE_REPORT")
-    assert value is not None
-    return value
-
-
-@pytest.fixture
-def fpath_mne_raw():
-    value = os.getenv("FPATH_MNE_RAW")
-    assert value is not None
-    return value
+from neuronol.utilities import create_bids_fpaths_from_recording_dir
 
 
 def test_handler_init():
@@ -65,46 +32,46 @@ def test_handler_on_created():
             assert handler.queue.get() == Path(testing_paths["CorrectFile"]).parent
 
 
-def test_observer_init():
-    watcher = DataWatcher(".")
+def test_observer_init(tmp_path):
+    watcher = DataWatcher(tmp_path)
     assert isinstance(watcher.observer, BaseObserver)
     assert isinstance(watcher.event_handler, DataEventHandler)
 
 
-def test_example_integration(
-    data_dir,
-    fpath_data_completion_flag,
-    fpath_mne_raw,
-    fpath_mne_report,
-):
+def test_example_integration():
+    data_dir = Path.home() / "data/bids/imotions-sample"
+    recording_data_dir_orig = data_dir / "sub-xx/ses-studyvisit2/eeg"
+    fpath_data_completion_flag = recording_data_dir_orig / WATCHER_DATA_COPY_COMPLETED
+    bids_fpaths_orig = create_bids_fpaths_from_recording_dir(recording_data_dir_orig)
+    # Set up watcher
     watcher = DataWatcher(data_dir)
     watcher.observer.start()
     # Trigger watcher
-    if Path(fpath_mne_raw).exists():
-        Path(fpath_mne_raw).unlink()
-    if Path(fpath_mne_report).exists():
-        Path(fpath_mne_report).unlink()
-    if Path(fpath_data_completion_flag).exists():
-        Path(fpath_data_completion_flag).unlink()
-    Path(fpath_data_completion_flag).touch()
+    if bids_fpaths_orig["mne-raw"].exists():
+        bids_fpaths_orig["mne-raw"].unlink()
+    if bids_fpaths_orig["mne-report"].exists():
+        bids_fpaths_orig["mne-report"].unlink()
+    if fpath_data_completion_flag.exists():
+        fpath_data_completion_flag.unlink()
+    fpath_data_completion_flag.touch()
     # Run data import once watcher is triggered
     recording_data_dir = watcher.event_handler.queue.get()
-    bids_fpaths = create_bids_file_paths_for_eegacamp_recording(recording_data_dir)
+    bids_fpaths = create_bids_fpaths_from_recording_dir(recording_data_dir)
     data_importer = DataImporter(
-        bids_fpaths["fpath_import"],
-        fpath_mne_raw=bids_fpaths["fpath_mne_raw"],
-        fpath_mne_report=bids_fpaths["fpath_mne_report"],
-        fpath_headcircum=bids_fpaths["fpath_headcircum"],
-        fpath_bs_dig=bids_fpaths["fpath_bs_dig"],
-        event_files=bids_fpaths["event_files"],
+        bids_fpaths["imotions-csv"],
+        fpath_mne_raw=bids_fpaths["mne-raw"],
+        fpath_mne_report=bids_fpaths["mne-report"],
+        fpath_headcircum=bids_fpaths["headcircum"],
+        fpath_bs_dig=bids_fpaths["headshape-dig"],
+        event_files=bids_fpaths["events-stim-times-files"],
         gnd_channel="GND",
         renamed_channels=EASYCAP_EEG_CHANNELS + ["GND"],
         verbose=True,
     )
     data_importer.run()
-    # Stop observer once test completed
+    # Stop observer once data reading completed
     watcher.observer.stop()
     watcher.observer.join()
     # Assertions
-    assert Path(fpath_mne_raw).exists()
-    assert Path(fpath_mne_report).exists()
+    assert bids_fpaths_orig["mne-raw"].exists()
+    assert bids_fpaths_orig["mne-report"].exists()

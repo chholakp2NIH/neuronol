@@ -1,11 +1,9 @@
 import datetime
-import os
 from pathlib import Path
 
 import mne
 import pandas as pd
 import pytest
-from dotenv import load_dotenv
 
 from neuronol.constants import (
     EASYCAP_EEG_CHANNELS,
@@ -15,163 +13,49 @@ from neuronol.constants import (
     IMOTIONS_MARKERS_COL,
 )
 from neuronol.io.importer import DataImporter
+from neuronol.utilities import create_bids_fpaths_from_recording_dir
 
-# Given
-load_dotenv()
-
-
-# Sub-xx
-@pytest.fixture
-def fpath_eeg_csv():
-    value = os.getenv("EEG_CSV_IMOTIONS")
-    assert value is not None
-    return value
+"""
+sub-xx: default shortest recording with blinks but no triggers
+sub-x3: short recording with embedded triggers but no blinks
+sub-x1: long recording with both blinks and embedded triggers
+sub-yy: same iMotions recording as sub-xx but contains alternative Brainstorm dig
+"""
 
 
-@pytest.fixture
-def fpath_mne_report():
-    value = os.getenv("FPATH_MNE_REPORT")
-    assert value is not None
-    return value
-
-
-@pytest.fixture
-def fpath_mne_raw():
-    value = os.getenv("FPATH_MNE_RAW")
-    assert value is not None
-    return value
-
-
+# Fixtures
 @pytest.fixture
 def model_events_sequence():
-    fpath_events_seq = os.getenv("MODEL_EVENTS_SEQUENCE")
-    assert fpath_events_seq is not None
-    df_events = pd.read_csv(fpath_events_seq)
+    df_events = pd.read_csv(
+        Path.home()
+        / "data/bids/imotions-sample"
+        / "derivatives/model_events_sequence_shortened.csv"
+    )
     return df_events["Event"]
-
-
-@pytest.fixture
-def fpath_restingstate_stimtimes():
-    value = os.getenv("FPATH_RESTINGSTATE_STIMTIMES")
-    assert value is not None
-    return value
-
-
-@pytest.fixture
-def fpath_dig():
-    value = os.getenv("FPATH_DIG")
-    assert value is not None
-    return value
-
-
-# Sub-x3
-@pytest.fixture
-def fpath_eeg_csv_trigs():
-    value = os.getenv("EEG_CSV_IMOTIONS_TRIGS")
-    assert value is not None
-    return value
-
-
-@pytest.fixture
-def fpath_mne_report_trigs():
-    value = os.getenv("FPATH_MNE_REPORT_TRIGS")
-    assert value is not None
-    return value
-
-
-@pytest.fixture
-def fpath_mne_raw_trigs():
-    value = os.getenv("FPATH_MNE_RAW_TRIGS")
-    assert value is not None
-    return value
-
-
-@pytest.fixture
-def model_events_sequence_trigs():
-    fpath_events_seq = os.getenv("MODEL_EVENTS_SEQUENCE_TRIGS")
-    assert fpath_events_seq is not None
-    df_events = pd.read_csv(fpath_events_seq)
-    return df_events["Event"]
-
-
-# Sub-x1
-@pytest.fixture
-def fpath_eeg_csv_long():
-    value = os.getenv("EEG_CSV_IMOTIONS_LONG")
-    assert value is not None
-    return value
-
-
-@pytest.fixture
-def fpath_mne_report_long():
-    value = os.getenv("FPATH_MNE_REPORT_LONG")
-    assert value is not None
-    return value
-
-
-@pytest.fixture
-def fpath_mne_raw_long():
-    value = os.getenv("FPATH_MNE_RAW_LONG")
-    assert value is not None
-    return value
-
-
-@pytest.fixture
-def model_events_sequence_long():
-    fpath_events_seq = os.getenv("MODEL_EVENTS_SEQUENCE_LONG")
-    assert fpath_events_seq is not None
-    df_events = pd.read_csv(fpath_events_seq)
-    return df_events["Event"]
-
-
-# Sub-yy
-@pytest.fixture
-def fpath_dig_alt_nasion():
-    value = os.getenv("FPATH_DIG_ALT_NASION")
-    assert value is not None
-    return value
-
-
-@pytest.fixture
-def fpath_eeg_csv_no_blinks():
-    value = os.getenv("EEG_CSV_IMOTIONS_NO_BLINKS")
-    assert value is not None
-    return value
-
-
-# Misc
-@pytest.fixture
-def fpath_headcircum():
-    value = os.getenv("HEADCIRCUM_JSON")
-    assert value is not None
-    return value
 
 
 # Run full data import (without embedded triggers)
-def test_run_full(
-    fpath_eeg_csv,
-    fpath_mne_raw,
-    fpath_mne_report,
-    fpath_dig,
-    fpath_restingstate_stimtimes,
-):
-    if Path(fpath_mne_raw).exists():
-        Path(fpath_mne_raw).unlink()
-    if Path(fpath_mne_report).exists():
-        Path(fpath_mne_report).unlink()
+def test_run_full():
+    bids_fpaths = create_bids_fpaths_from_recording_dir(
+        Path.home() / "data/bids/imotions-sample" / "sub-xx" / "ses-studyvisit2/eeg"
+    )
+    if bids_fpaths["mne-raw"].exists():
+        bids_fpaths["mne-raw"].unlink()
+    if bids_fpaths["mne-report"].exists():
+        bids_fpaths["mne-report"].unlink()
     data_importer = DataImporter(
-        fpath_eeg_csv,
-        fpath_mne_raw=fpath_mne_raw,
-        fpath_mne_report=fpath_mne_report,
-        fpath_bs_dig=fpath_dig,
-        event_files=[fpath_restingstate_stimtimes],
+        bids_fpaths["imotions-csv"],
+        fpath_mne_raw=bids_fpaths["mne-raw"],
+        fpath_mne_report=bids_fpaths["mne-report"],
+        fpath_bs_dig=bids_fpaths["headshape-dig"],
+        event_files=bids_fpaths["events-stim-times-files"],
         gnd_channel="GND",
         renamed_channels=EASYCAP_EEG_CHANNELS + ["GND"],
     )
     data_importer.run()
     assert isinstance(data_importer.recording.raw, mne.io.RawArray)
-    assert Path(fpath_mne_raw).exists()
-    assert Path(fpath_mne_report).exists()
+    assert bids_fpaths["mne-raw"].exists()
+    assert bids_fpaths["mne-report"].exists()
     assert IMOTIONS_BLINK_COL in data_importer.recording.raw.annotations.description
     assert "GND" in data_importer.recording.raw.ch_names
     assert data_importer.recording.raw.get_montage() == data_importer.recording.dig
@@ -179,61 +63,67 @@ def test_run_full(
 
 
 # Run data import (with embedded triggers)
-def test_run_with_embedded_triggers(
-    fpath_eeg_csv_long,
-):
-    data_importer = DataImporter(
-        fpath_eeg_csv_long,
+def test_run_with_embedded_triggers():
+    bids_fpaths = create_bids_fpaths_from_recording_dir(
+        Path.home() / "data/bids/imotions-sample" / "sub-x3" / "ses-studyvisit2/eeg"
     )
+    data_importer = DataImporter(bids_fpaths["imotions-csv"])
     data_importer.run()
     assert "trials-start" in data_importer.recording.raw.annotations.description
 
 
 # Run data import (without embedded triggers)
-def test_run_without_embedded_triggers(
-    fpath_eeg_csv,
-    fpath_restingstate_stimtimes,
-):
-    # Test MNE Report and MNE Raw creation (in a file with embedded triggers)
+def test_run_without_embedded_triggers():
+    bids_fpaths = create_bids_fpaths_from_recording_dir(
+        Path.home() / "data/bids/imotions-sample" / "sub-xx" / "ses-studyvisit2/eeg"
+    )
+    # Test MNE Report and MNE Raw creation (using a file with triggers)
     data_importer = DataImporter(
-        fpath_eeg_csv, event_files=[fpath_restingstate_stimtimes]
+        bids_fpaths["imotions-csv"],
+        event_files=bids_fpaths["events-stim-times-files"],
     )
     data_importer.run()
     assert "trials-start" in data_importer.recording.raw.annotations.description
 
 
 # Create MNE raw from iMotions CSV
-def test_create_mne_raw_from_imotions_csv(fpath_eeg_csv):
-    data_importer = DataImporter(fpath_eeg_csv)
+def test_create_mne_raw_from_imotions_csv():
+    bids_fpaths = create_bids_fpaths_from_recording_dir(
+        Path.home() / "data/bids/imotions-sample" / "sub-xx" / "ses-studyvisit2/eeg"
+    )
+    data_importer = DataImporter(bids_fpaths["imotions-csv"])
     data_importer.create_mne_raw_from_imotions_csv()
     assert isinstance(data_importer.recording.raw, mne.io.RawArray)
 
 
 # Read data
-def test_read_imotions_data_as_df(
-    fpath_eeg_csv,
-):
-    data_importer = DataImporter(fpath_eeg_csv)
+def test_read_imotions_data_as_df():
+    bids_fpaths = create_bids_fpaths_from_recording_dir(
+        Path.home() / "data/bids/imotions-sample" / "sub-xx" / "ses-studyvisit2/eeg"
+    )
+    data_importer = DataImporter(bids_fpaths["imotions-csv"])
     data_importer.read_imotions_data_as_df()
     assert isinstance(data_importer.recording.df_raw, pd.DataFrame)
     assert not data_importer.recording.df_raw.empty
 
 
 # Read iMotions preamble
-def test_read_imotions_csv_preamble(
-    fpath_eeg_csv,
-):
-    data_importer = DataImporter(fpath_eeg_csv)
+def test_read_imotions_csv_preamble():
+    bids_fpaths = create_bids_fpaths_from_recording_dir(
+        Path.home() / "data/bids/imotions-sample" / "sub-xx" / "ses-studyvisit2/eeg"
+    )
+    data_importer = DataImporter(bids_fpaths["imotions-csv"])
     data_importer.read_imotions_csv_preamble()
     assert isinstance(data_importer.recording.preamble, str)
     assert len(data_importer.recording.preamble) > 0
 
 
 # Read full iMotions CSV
-def test_read_imotions_csv_full(
-    fpath_eeg_csv,
-):
-    data_importer = DataImporter(fpath_eeg_csv)
+def test_read_imotions_csv_full():
+    bids_fpaths = create_bids_fpaths_from_recording_dir(
+        Path.home() / "data/bids/imotions-sample" / "sub-xx" / "ses-studyvisit2/eeg"
+    )
+    data_importer = DataImporter(bids_fpaths["imotions-csv"])
     data_importer.read_imotions_csv_full()
     assert isinstance(data_importer.recording.df_raw, pd.DataFrame)
     assert not data_importer.recording.df_raw.empty
@@ -242,20 +132,22 @@ def test_read_imotions_csv_full(
 
 
 # Read recording date/time
-def test_get_recording_datetime_from_imotions_preamble(
-    fpath_eeg_csv,
-):
-    data_importer = DataImporter(fpath_eeg_csv)
+def test_get_recording_datetime_from_imotions_preamble():
+    bids_fpaths = create_bids_fpaths_from_recording_dir(
+        Path.home() / "data/bids/imotions-sample" / "sub-xx" / "ses-studyvisit2/eeg"
+    )
+    data_importer = DataImporter(bids_fpaths["imotions-csv"])
     data_importer.read_imotions_csv_preamble()
     data_importer.get_recording_datetime_from_imotions_preamble()
     assert isinstance(data_importer.recording.recording_dt, datetime.datetime)
 
 
 # Get EEG data column numbers
-def test_get_eeg_data_column_numbers(
-    fpath_eeg_csv,
-):
-    data_importer = DataImporter(fpath_eeg_csv)
+def test_get_eeg_data_column_numbers():
+    bids_fpaths = create_bids_fpaths_from_recording_dir(
+        Path.home() / "data/bids/imotions-sample" / "sub-xx" / "ses-studyvisit2/eeg"
+    )
+    data_importer = DataImporter(bids_fpaths["imotions-csv"])
     data_importer.read_imotions_csv_preamble()
     data_importer.get_eeg_data_column_numbers()
     assert all([isinstance(w, int) for w in data_importer.recording.eeg_col_nums])
@@ -263,10 +155,11 @@ def test_get_eeg_data_column_numbers(
 
 
 # Extract EEG data from iMotions data
-def test_extract_eeg_from_imotions_data(
-    fpath_eeg_csv,
-):
-    data_importer = DataImporter(fpath_eeg_csv)
+def test_extract_eeg_from_imotions_data():
+    bids_fpaths = create_bids_fpaths_from_recording_dir(
+        Path.home() / "data/bids/imotions-sample" / "sub-xx" / "ses-studyvisit2/eeg"
+    )
+    data_importer = DataImporter(bids_fpaths["imotions-csv"])
     data_importer.read_imotions_csv_full()
     data_importer.extract_eeg_from_imotions_data(eeg_channels=EASYCAP_EEG_CHANNELS)
     assert isinstance(data_importer.recording.df_eeg, pd.DataFrame)
@@ -275,8 +168,13 @@ def test_extract_eeg_from_imotions_data(
 
 
 # Extract head radius from dedicated JSON file
-def test_head_radius(fpath_eeg_csv, fpath_headcircum):
-    data_importer = DataImporter(fpath_eeg_csv, fpath_headcircum=fpath_headcircum)
+def test_head_radius():
+    bids_fpaths = create_bids_fpaths_from_recording_dir(
+        Path.home() / "data/bids/imotions-sample" / "sub-xx" / "ses-studyvisit2/eeg"
+    )
+    data_importer = DataImporter(
+        bids_fpaths["imotions-csv"], fpath_headcircum=bids_fpaths["headcircum"]
+    )
     data_importer.evaluate_head_radius()
     assert isinstance(data_importer.recording.head_circum, float)
     assert isinstance(data_importer.recording.head_radius, float)
@@ -285,10 +183,11 @@ def test_head_radius(fpath_eeg_csv, fpath_headcircum):
 
 
 # Read ECG data from iMotions CSV and interpolate it to match EEG timepoints
-def test_add_interpolated_ecg_to_eeg(
-    fpath_eeg_csv,
-):
-    data_importer = DataImporter(fpath_eeg_csv)
+def test_add_interpolated_ecg_to_eeg():
+    bids_fpaths = create_bids_fpaths_from_recording_dir(
+        Path.home() / "data/bids/imotions-sample" / "sub-xx" / "ses-studyvisit2/eeg"
+    )
+    data_importer = DataImporter(bids_fpaths["imotions-csv"])
     data_importer.read_imotions_csv_full()
     data_importer.extract_eeg_from_imotions_data()
     data_importer.add_interpolated_ecg_to_eeg()
@@ -296,12 +195,15 @@ def test_add_interpolated_ecg_to_eeg(
 
 
 # Extract blink times from iMotions' data
-def test_extract_event_times_from_imotions_data(fpath_eeg_csv, fpath_eeg_csv_no_blinks):
-    data_importer = DataImporter(fpath_eeg_csv)
+def test_extract_event_times_from_imotions_data():
+    bids_fpaths = create_bids_fpaths_from_recording_dir(
+        Path.home() / "data/bids/imotions-sample" / "sub-xx" / "ses-studyvisit2/eeg"
+    )
+    data_importer = DataImporter(bids_fpaths["imotions-csv"])
     data_importer.read_imotions_csv_full()
     data_importer.extract_event_times_from_imotions_data(
         IMOTIONS_BLINK_COL, IMOTIONS_BLINK_COL_POSITIVE_VALUE
-    )
+    )  # iMotions CSV with blinks present
     assert len(data_importer.recording.event_onsets) > 0
     assert (
         sum(
@@ -312,7 +214,10 @@ def test_extract_event_times_from_imotions_data(fpath_eeg_csv, fpath_eeg_csv_no_
         )
         > 0
     )
-    data_importer = DataImporter(fpath_eeg_csv_no_blinks)
+    bids_fpaths = create_bids_fpaths_from_recording_dir(
+        Path.home() / "data/bids/imotions-sample" / "sub-yy" / "ses-studyvisit2/eeg"
+    )  # iMotions CSV with no blinks
+    data_importer = DataImporter(bids_fpaths["imotions-csv"])
     data_importer.read_imotions_csv_full()
     with pytest.raises(
         ValueError, match=f"No positive instance found for event: {IMOTIONS_BLINK_COL}"
@@ -324,16 +229,18 @@ def test_extract_event_times_from_imotions_data(fpath_eeg_csv, fpath_eeg_csv_no_
 
 # Extract event triggers from iMotions' data
 def test_read_event_markers_from_imotions_data(
-    fpath_eeg_csv_trigs, model_events_sequence_trigs
+    model_events_sequence,
 ):
-    data_importer = DataImporter(fpath_eeg_csv_trigs)
+    bids_fpaths = create_bids_fpaths_from_recording_dir(
+        Path.home() / "data/bids/imotions-sample" / "sub-x3" / "ses-studyvisit2/eeg"
+    )  # iMotions CSV with no blinks
+    data_importer = DataImporter(bids_fpaths["imotions-csv"])
     data_importer.read_imotions_csv_full()
     data_importer.read_event_markers_from_imotions_data()
     events_read_from_triggers = data_importer.recording.event_markers[
         IMOTIONS_MARKERS_COL
     ].values
-    events_sequence_designed = model_events_sequence_trigs.values
-    # n_events_min = min(len(events_read_from_triggers), len(events_sequence_designed))
+    events_sequence_designed = model_events_sequence.values
     n_events = len(events_sequence_designed)
     assert all(events_read_from_triggers[:n_events] == events_sequence_designed)
     assert len(events_read_from_triggers) > 0
@@ -342,10 +249,11 @@ def test_read_event_markers_from_imotions_data(
 
 
 # Create MNE Raw from extracted electrophys data
-def test_convert_electrophys_data_to_mne_raw_object(
-    fpath_eeg_csv,
-):
-    data_importer = DataImporter(fpath_eeg_csv)
+def test_convert_electrophys_data_to_mne_raw_object():
+    bids_fpaths = create_bids_fpaths_from_recording_dir(
+        Path.home() / "data/bids/imotions-sample" / "sub-xx" / "ses-studyvisit2/eeg"
+    )  # iMotions CSV with no blinks
+    data_importer = DataImporter(bids_fpaths["imotions-csv"])
     data_importer.read_imotions_csv_full()
     data_importer.extract_eeg_from_imotions_data()
     data_importer.add_interpolated_ecg_to_eeg()
@@ -357,51 +265,65 @@ def test_convert_electrophys_data_to_mne_raw_object(
 
 
 # Read event markers from Excel and add to MNE Raw
-def test_add_event_markers_from_event_files_to_mne_raw(
-    fpath_eeg_csv, fpath_restingstate_stimtimes
-):
-    data_importer = DataImporter(fpath_eeg_csv)
+def test_add_event_markers_from_event_files_to_mne_raw():
+    bids_fpaths = create_bids_fpaths_from_recording_dir(
+        Path.home() / "data/bids/imotions-sample" / "sub-xx" / "ses-studyvisit2/eeg"
+    )  # iMotions CSV with no blinks
+    data_importer = DataImporter(bids_fpaths["imotions-csv"])
     data_importer.create_mne_raw_from_imotions_csv()
     data_importer.recording.raw.set_annotations(None)
-    data_importer.add_event_markers_from_event_files_to_mne_raw(
-        fpath_restingstate_stimtimes
-    )
+    for fpath in bids_fpaths["events-stim-times-files"]:
+        data_importer.add_event_markers_from_event_files_to_mne_raw(fpath)
     assert "trials-start" in data_importer.recording.raw.annotations.description
     assert len(data_importer.recording.raw.annotations) > 0
 
 
 # Create MNE dig montage from Brainstorm dig data
 def test_create_mne_montage_from_brainstorm_dig_data(
-    tmp_path, fpath_dig, fpath_dig_alt_nasion
+    tmp_path,
 ):
+    # Default import
     data_importer = DataImporter(tmp_path)
-    data_importer.create_mne_montage_from_brainstorm_dig_data(fpath_dig)
+    bids_fpaths = create_bids_fpaths_from_recording_dir(
+        Path.home() / "data/bids/imotions-sample" / "sub-xx" / "ses-studyvisit2/eeg"
+    )  # iMotions CSV with no blinks
+    data_importer.create_mne_montage_from_brainstorm_dig_data(
+        bids_fpaths["headshape-dig"]
+    )
     assert isinstance(data_importer.recording.dig, mne.channels.DigMontage)
+    # Import with channels renamed
     embedded_ch_names_in_dig = data_importer.recording.dig.ch_names
     data_importer = DataImporter(tmp_path)
     data_importer.create_mne_montage_from_brainstorm_dig_data(
-        fpath_dig, renamed_channels=EASYCAP_EEG_CHANNELS + ["GND"]
+        bids_fpaths["headshape-dig"],
+        renamed_channels=EASYCAP_EEG_CHANNELS + ["GND"],
     )
     renamed_ch_names_in_dig = data_importer.recording.dig.ch_names
     assert not (renamed_ch_names_in_dig == embedded_ch_names_in_dig)
     assert renamed_ch_names_in_dig == EASYCAP_EEG_CHANNELS + ["GND"]
+    # Import with alternative nasion labels in dig data
     data_importer = DataImporter(tmp_path)
-    data_importer.create_mne_montage_from_brainstorm_dig_data(fpath_dig_alt_nasion)
+    bids_fpaths = create_bids_fpaths_from_recording_dir(
+        Path.home() / "data/bids/imotions-sample" / "sub-yy" / "ses-studyvisit2/eeg"
+    )  # iMotions CSV with no blinks
+    data_importer.create_mne_montage_from_brainstorm_dig_data(
+        bids_fpaths["headshape-dig"]
+    )
     assert isinstance(data_importer.recording.dig, mne.channels.DigMontage)
 
 
 # Log message
-def test_log_message(fpath_eeg_csv, capsys):
+def test_log_message(tmp_path, capsys):
     """
     Test log_message function
     """
     # Verbose: True
-    data_importer = DataImporter(fpath_eeg_csv, verbose=True)
+    data_importer = DataImporter(tmp_path, verbose=True)
     data_importer._log_message("Hello World!")
     captured = capsys.readouterr()
     assert captured.out == "\n!! Hello World! \n\n"
     # Verbose: False
-    data_importer = DataImporter(fpath_eeg_csv, verbose=False)
+    data_importer = DataImporter(tmp_path, verbose=False)
     data_importer._log_message("Hello World!")
     captured = capsys.readouterr()
     assert captured.out == ""

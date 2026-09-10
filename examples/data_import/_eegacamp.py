@@ -3,7 +3,10 @@ from pathlib import Path
 from neuronol.constants import EASYCAP_EEG_CHANNELS
 from neuronol.io.dbmanager import DBManager
 from neuronol.io.importer import DataImporter
-from neuronol.utilities import get_sub_and_ses_from_bids_rec_dir
+from neuronol.utilities import (
+    create_bids_fpaths_from_recording_dir,
+    get_sub_and_ses_from_bids_rec_dir,
+)
 
 EEGACAMP_DB_INIT_SCRIPT = """
 PRAGMA foreign_keys = ON;
@@ -62,14 +65,14 @@ def import_unimported_eegacamp_data(recording_data_dir: Path, db_manager: DBMana
         print(f"\nImporting recording data for sub-{sub_id} ses-{ses_id}...")
 
         # Import data
-        bids_fpaths = create_bids_file_paths_for_eegacamp_recording(recording_data_dir)
+        bids_fpaths = create_bids_fpaths_from_recording_dir(recording_data_dir)
         data_importer = DataImporter(
-            bids_fpaths["fpath_import"],
-            fpath_mne_raw=bids_fpaths["fpath_mne_raw"],
-            fpath_mne_report=bids_fpaths["fpath_mne_report"],
-            fpath_headcircum=bids_fpaths["fpath_headcircum"],
-            fpath_bs_dig=bids_fpaths["fpath_bs_dig"],
-            event_files=bids_fpaths["event_files"],
+            bids_fpaths["imotions-csv"],
+            fpath_mne_raw=bids_fpaths["mne-raw"],
+            fpath_mne_report=bids_fpaths["mne-report"],
+            fpath_headcircum=bids_fpaths["headcircum"],
+            fpath_bs_dig=bids_fpaths["headshape-dig"],
+            event_files=bids_fpaths["events-stim-times-files"],
             gnd_channel="GND",
             renamed_channels=EASYCAP_EEG_CHANNELS + ["GND"],
             verbose=True,
@@ -124,26 +127,3 @@ def import_unimported_eegacamp_data(recording_data_dir: Path, db_manager: DBMana
                 )
             ],
         )  # add recording
-
-
-def create_bids_file_paths_for_eegacamp_recording(recording_data_dir: Path):
-    """
-    Creates file paths for raw iMotions' CSV and other related
-    files found under the recording data path.
-    """
-    # subj_id = re.findall(r"^.+/sub-(.+?)/.+$", str(recording_data_dir))[0]
-    sub_id, _ = get_sub_and_ses_from_bids_rec_dir(recording_data_dir)
-    fpaths = {
-        "fpath_import": recording_data_dir / f"sub-{sub_id}_task-all_eeg.csv",
-        "fpath_mne_raw": recording_data_dir / f"sub-{sub_id}_task-all_eeg.fif",
-        "fpath_mne_report": recording_data_dir
-        / f"sub-{sub_id}_task-all_importreport.html",
-        "fpath_headcircum": (
-            recording_data_dir / f"sub-{sub_id}_desc-manual_headcircumference.json"
-        ),
-        "fpath_bs_dig": (
-            recording_data_dir / f"sub-{sub_id}_task-all_acq-polhemus_headshape.mat"
-        ),
-        "event_files": recording_data_dir.glob("*_eventsstimtimes.xlsx"),
-    }
-    return fpaths
