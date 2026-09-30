@@ -1,0 +1,16 @@
+FROM python:3.14
+
+WORKDIR /app
+
+# Install neuronol and its dependencies
+COPY pyproject.toml .
+COPY neuronol ./neuronol
+RUN python -m pip install --no-cache-dir .
+
+# Copy the paired python example script
+COPY examples/data_import/watcher+db+recreate/eegacamp_import_with_watcher+db+recreate.py ./examples/data_import/eegacamp_import_data.py
+COPY examples/data_import/_eegacamp.py ./examples/data_import/_eegacamp.py
+
+# Run script
+WORKDIR /app/examples/data_import
+CMD ["python", "-u", "-X", "faulthandler", "eegacamp_import_data.py"]

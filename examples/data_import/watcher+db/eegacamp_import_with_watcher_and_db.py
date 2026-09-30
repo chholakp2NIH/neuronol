@@ -18,13 +18,14 @@ data_dir = Path(
         os.path.expanduser("~/data/bids/eegacamp-test/"),
     )
 )
-recording_data_dir = data_dir / "sub-xx/ses-studyvisit2/eeg/"
+# recording_data_dir = data_dir / "sub-xx/ses-studyvisit2/eeg/"
 fpath_db = data_dir / "derivatives/imaging.db"
 
 # Prepare db
+# if fpath_db.exists():
+#     fpath_db.unlink()
 if fpath_db.exists():
     fpath_db.unlink()
-if fpath_db.exists():
     db_manager = DBManager(fpath_db)
 else:
     db_manager = DBManager(
@@ -38,11 +39,11 @@ try:
     while True:
         time.sleep(1)
         recording_data_dir = watcher.event_handler.queue.get()
-        import_unimported_eegacamp_data(recording_data_dir, db_manager)
-        # try:
-        #     import_new_eegacamp_data(recording_data_dir, db_manager)
-        # except Exception as e:
-        #     print(f"\n(xx) Data import failed: {e}")
+        # import_unimported_eegacamp_data(recording_data_dir, db_manager)
+        try:
+            import_unimported_eegacamp_data(recording_data_dir, db_manager)
+        except Exception as e:
+            print(f"\n(xx) Data import failed: {e}")
 finally:
     watcher.observer.stop()
     watcher.observer.join()
