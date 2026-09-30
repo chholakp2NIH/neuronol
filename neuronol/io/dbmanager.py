@@ -82,6 +82,31 @@ class DBManager:
         cur.executemany(script, values)
         self.conn.commit()
 
+    # Update data row(s) in table
+    def update_row_in_table(
+        self,
+        table_name,
+        col_names: tuple[str],
+        values: list[tuple],
+        id_col_names: tuple[str],
+        id_col_names_values: list[tuple],
+    ):
+        """
+        Update row(s) of data under list column names in table.
+        """
+        cur = self.conn.cursor()
+        set_clause = ", ".join([f"{col} = ?" for col in col_names])
+        where_clause = " AND ".join([f"{col} = ?" for col in id_col_names])
+        script = f"""
+        UPDATE {table_name}
+        SET {set_clause}
+        WHERE {where_clause};
+        """
+        cur.executemany(
+            script, [v + col_id for v, col_id in zip(values, id_col_names_values)]
+        )
+        self.conn.commit()
+
     # Convert table to df
     def import_table_as_df(self, table_name: str):
         """

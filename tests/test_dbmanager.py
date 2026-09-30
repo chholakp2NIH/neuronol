@@ -141,3 +141,49 @@ def test_add_rows_to_table(tmp_path):
     scores = db_manager.read_col_values_from_table("participants", "score")
     assert sub_ids == ["sub-01", "sub-02"]
     assert scores == [100, 80]
+
+
+def test_update_row_in_table(tmp_path):
+    db_init_script = "CREATE TABLE participants (sub_id PRIMARY_KEY, score);"
+    # Update single row
+    db_manager = DBManager(
+        tmp_path / "db_single_row.db", initialize_db=True, db_init_script=db_init_script
+    )
+    db_manager.add_row_to_table(
+        "participants",
+        ("sub_id", "score"),
+        values=[("sub-01", 100)],
+    )
+    db_manager.update_row_in_table(
+        "participants",
+        ("sub_id", "score"),
+        values=[("sub-02", 0)],
+        id_col_names=("sub_id",),
+        id_col_names_values=[("sub-01",)],
+    )
+    sub_ids = db_manager.read_col_values_from_table("participants", "sub_id")
+    scores = db_manager.read_col_values_from_table("participants", "score")
+    assert sub_ids == ["sub-02"]
+    assert scores == [0]
+    # Update multiple rows
+    db_manager = DBManager(
+        tmp_path / "db_multiple_rows.db",
+        initialize_db=True,
+        db_init_script=db_init_script,
+    )
+    db_manager.add_row_to_table(
+        "participants",
+        ("sub_id", "score"),
+        values=[("sub-01", 100), ("sub-02", 100)],
+    )
+    db_manager.update_row_in_table(
+        "participants",
+        ("sub_id", "score"),
+        values=[("sub-03", 30), ("sub-04", 40)],
+        id_col_names=("sub_id",),
+        id_col_names_values=[("sub-01",), ("sub-02",)],
+    )
+    sub_ids = db_manager.read_col_values_from_table("participants", "sub_id")
+    scores = db_manager.read_col_values_from_table("participants", "score")
+    assert sub_ids == ["sub-03", "sub-04"]
+    assert scores == [30, 40]
