@@ -4,24 +4,34 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
+import matplotlib.pyplot as plt
 import mne
 import numpy as np
 import pandas as pd
 from scipy.interpolate import make_interp_spline
 from scipy.io import loadmat
 
-from neuronol.constants import (BS_LABEL_LPA, BS_LABEL_NAS,
-                                BS_LABEL_NAS_ALTERNATIVE, BS_LABEL_RPA,
-                                BS_SUBVAR_CHANNEL_LOC, BS_SUBVAR_CHANNEL_NAME,
-                                BS_SUBVAR_HEADPOINTS_LABEL,
-                                BS_SUBVAR_HEADPOINTS_LOC,
-                                BS_SUBVAR_HEADPOINTS_TYPE, BS_VAR_CHANNEL,
-                                BS_VAR_HEADPOINTS, EASYCAP_EEG_CHANNELS,
-                                IMOTIONS_BLINK_COL,
-                                IMOTIONS_BLINK_COL_POSITIVE_VALUE,
-                                IMOTIONS_ECG_COL, IMOTIONS_MARKERS_COL,
-                                IMOTIONS_TIMESTAMP_COL, SFREQ,
-                                T_WIN_NO_DUPL_MARKERS)
+from neuronol.constants import (
+    BS_LABEL_LPA,
+    BS_LABEL_NAS,
+    BS_LABEL_NAS_ALTERNATIVE,
+    BS_LABEL_RPA,
+    BS_SUBVAR_CHANNEL_LOC,
+    BS_SUBVAR_CHANNEL_NAME,
+    BS_SUBVAR_HEADPOINTS_LABEL,
+    BS_SUBVAR_HEADPOINTS_LOC,
+    BS_SUBVAR_HEADPOINTS_TYPE,
+    BS_VAR_CHANNEL,
+    BS_VAR_HEADPOINTS,
+    EASYCAP_EEG_CHANNELS,
+    IMOTIONS_BLINK_COL,
+    IMOTIONS_BLINK_COL_POSITIVE_VALUE,
+    IMOTIONS_ECG_COL,
+    IMOTIONS_MARKERS_COL,
+    IMOTIONS_TIMESTAMP_COL,
+    SFREQ,
+    T_WIN_NO_DUPL_MARKERS,
+)
 
 
 @dataclass
@@ -155,6 +165,7 @@ class DataImporter:
                                     "2D Headshape Digitization",
                                     section="EEG Shape and Headshape Digitization",
                                 )
+                                plt.close(fig)
                         if self.include_3d_plots:
                             # 3D Matplotlib plot
                             fig = self.recording.dig.plot(kind="3d")  # 3d plot
@@ -202,6 +213,9 @@ class DataImporter:
             # Save MNE Raw to disk
             if self.save_mne_raw:
                 self.recording.raw.save(self.fpath_mne_raw, overwrite=True)
+
+            # # Close any open matplotlib figs
+            # plt.close("all")
 
         # Save MNE report (if created)
         if self.create_mne_report:
