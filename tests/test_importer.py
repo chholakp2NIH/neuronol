@@ -18,6 +18,7 @@ from neuronol.utilities import create_bids_fpaths_from_recording_dir
 """
 sub-xx: default shortest recording with blinks but no triggers
 sub-x3: short recording with embedded triggers but no blinks
+sub-x8: short recording with alternative recording time format in iMotions' CSV preamble
 sub-x1: long recording with both blinks and embedded triggers
 sub-yy: same iMotions recording as sub-xx but contains alternative Brainstorm dig
 """
@@ -136,8 +137,15 @@ def test_read_imotions_csv_full():
 
 # Read recording date/time
 def test_get_recording_datetime_from_imotions_preamble():
-    bids_fpaths = create_bids_fpaths_from_recording_dir(
+    bids_fpaths = create_bids_fpaths_from_recording_dir(  # old recording time format
         Path.home() / "data/bids/imotions-sample" / "sub-xx" / "ses-studyvisit2/eeg"
+    )
+    data_importer = DataImporter(bids_fpaths["imotions-csv"])
+    data_importer.read_imotions_csv_preamble()
+    data_importer.get_recording_datetime_from_imotions_preamble()
+    assert isinstance(data_importer.recording.recording_dt, datetime.datetime)
+    bids_fpaths = create_bids_fpaths_from_recording_dir(  # new recording time format
+        Path.home() / "data/bids/imotions-sample" / "sub-x8" / "ses-studyvisit2/eeg"
     )
     data_importer = DataImporter(bids_fpaths["imotions-csv"])
     data_importer.read_imotions_csv_preamble()

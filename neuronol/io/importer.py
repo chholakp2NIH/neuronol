@@ -10,18 +10,27 @@ import pandas as pd
 from scipy.interpolate import make_interp_spline
 from scipy.io import loadmat
 
-from neuronol.constants import (BS_LABEL_LPA, BS_LABEL_NAS,
-                                BS_LABEL_NAS_ALTERNATIVE, BS_LABEL_RPA,
-                                BS_SUBVAR_CHANNEL_LOC, BS_SUBVAR_CHANNEL_NAME,
-                                BS_SUBVAR_HEADPOINTS_LABEL,
-                                BS_SUBVAR_HEADPOINTS_LOC,
-                                BS_SUBVAR_HEADPOINTS_TYPE, BS_VAR_CHANNEL,
-                                BS_VAR_HEADPOINTS, EASYCAP_EEG_CHANNELS,
-                                IMOTIONS_BLINK_COL,
-                                IMOTIONS_BLINK_COL_POSITIVE_VALUE,
-                                IMOTIONS_ECG_COL, IMOTIONS_MARKERS_COL,
-                                IMOTIONS_TIMESTAMP_COL, SFREQ,
-                                T_WIN_NO_DUPL_MARKERS)
+from neuronol.constants import (
+    BS_LABEL_LPA,
+    BS_LABEL_NAS,
+    BS_LABEL_NAS_ALTERNATIVE,
+    BS_LABEL_RPA,
+    BS_SUBVAR_CHANNEL_LOC,
+    BS_SUBVAR_CHANNEL_NAME,
+    BS_SUBVAR_HEADPOINTS_LABEL,
+    BS_SUBVAR_HEADPOINTS_LOC,
+    BS_SUBVAR_HEADPOINTS_TYPE,
+    BS_VAR_CHANNEL,
+    BS_VAR_HEADPOINTS,
+    EASYCAP_EEG_CHANNELS,
+    IMOTIONS_BLINK_COL,
+    IMOTIONS_BLINK_COL_POSITIVE_VALUE,
+    IMOTIONS_ECG_COL,
+    IMOTIONS_MARKERS_COL,
+    IMOTIONS_TIMESTAMP_COL,
+    SFREQ,
+    T_WIN_NO_DUPL_MARKERS,
+)
 
 
 @dataclass
@@ -341,11 +350,19 @@ class DataImporter:
         Find the date/time of the iMotions recording from the CSV preamble.
         """
         date_str = time_str = None
+        print(self.recording.preamble)
         for line in self.recording.preamble.splitlines():
             if line.startswith("#Recording time"):
                 m = re.search(r"^.+,Date: (\d{4}-\d{2}-\d{2}),.+$", line)
                 if m:
                     date_str = m.group(1)
+                else:
+                    m = re.search(r"^.+,Date: (\d{1,2}/\d{1,2}/\d{4}),.+$", line)
+                    if m:
+                        date_str = str(
+                            dt.datetime.strptime(m.group(1), "%m/%d/%Y").date()
+                        )
+                        print(date_str)
                 m = re.search(r"^.+,Time: (\d{2}:\d{2}:\d{2}\.\d{3}) .+,.+$", line)
                 if m:
                     time_str = m.group(1)
