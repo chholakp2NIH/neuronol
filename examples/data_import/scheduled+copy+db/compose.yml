@@ -1,0 +1,14 @@
+services:
+  auto-data-importer:
+    container_name: "neuronol-auto-data-importer"
+    build:
+      context: ../../..
+      dockerfile: examples/data_import/scheduled+copy+db/Dockerfile
+    restart: unless-stopped
+    environment:
+      EXAMPLE_SRC_DIR: /src_data # sets env var inside the container
+      EXAMPLE_DST_DIR: /dst_data # sets env var inside the container
+      TZ: America/New_York
+    volumes:
+      - /Volumes/lcts/BEI/Studies/1644-EEGAcamp/Data/BIDS/eegacamp:/src_data
+      - ${HOME}/data/bids/eegacamp:/dst_data
