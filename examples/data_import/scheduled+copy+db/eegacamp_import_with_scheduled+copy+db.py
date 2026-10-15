@@ -19,13 +19,13 @@ from neuronol.io.dbmanager import DBManager
 src_dir = Path(
     os.environ.get(
         "EXAMPLE_SRC_DIR",
-        os.path.expanduser("~/data/bids/eegacamp/"),
+        "/Volumes/lcts/BEI/Studies/1644-EEGAcamp/Data/BIDS/eegacamp",
     )
 )
 dst_dir = Path(
     os.environ.get(
         "EXAMPLE_DST_DIR",
-        os.path.expanduser("~/data/bids/eegacamp-test/"),
+        os.path.expanduser("~/data/bids/eegacamp/"),
     )
 )
 fpath_db = dst_dir / "derivatives/imaging.db"
