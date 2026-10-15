@@ -10,27 +10,18 @@ import pandas as pd
 from scipy.interpolate import make_interp_spline
 from scipy.io import loadmat
 
-from neuronol.constants import (
-    BS_LABEL_LPA,
-    BS_LABEL_NAS,
-    BS_LABEL_NAS_ALTERNATIVE,
-    BS_LABEL_RPA,
-    BS_SUBVAR_CHANNEL_LOC,
-    BS_SUBVAR_CHANNEL_NAME,
-    BS_SUBVAR_HEADPOINTS_LABEL,
-    BS_SUBVAR_HEADPOINTS_LOC,
-    BS_SUBVAR_HEADPOINTS_TYPE,
-    BS_VAR_CHANNEL,
-    BS_VAR_HEADPOINTS,
-    EASYCAP_EEG_CHANNELS,
-    IMOTIONS_BLINK_COL,
-    IMOTIONS_BLINK_COL_POSITIVE_VALUE,
-    IMOTIONS_ECG_COL,
-    IMOTIONS_MARKERS_COL,
-    IMOTIONS_TIMESTAMP_COL,
-    SFREQ,
-    T_WIN_NO_DUPL_MARKERS,
-)
+from neuronol.constants import (BS_LABEL_LPA, BS_LABEL_NAS,
+                                BS_LABEL_NAS_ALTERNATIVE, BS_LABEL_RPA,
+                                BS_SUBVAR_CHANNEL_LOC, BS_SUBVAR_CHANNEL_NAME,
+                                BS_SUBVAR_HEADPOINTS_LABEL,
+                                BS_SUBVAR_HEADPOINTS_LOC,
+                                BS_SUBVAR_HEADPOINTS_TYPE, BS_VAR_CHANNEL,
+                                BS_VAR_HEADPOINTS, EASYCAP_EEG_CHANNELS,
+                                IMOTIONS_BLINK_COL,
+                                IMOTIONS_BLINK_COL_POSITIVE_VALUE,
+                                IMOTIONS_ECG_COL, IMOTIONS_MARKERS_COL,
+                                IMOTIONS_TIMESTAMP_COL, SFREQ,
+                                T_WIN_NO_DUPL_MARKERS)
 
 
 @dataclass
@@ -52,6 +43,8 @@ class Recording:
     ecg_data_imported: bool | None = None
     blink_data_imported: bool | None = None
     event_markers_imported: bool | None = None
+    event_markers_trig_imported: bool | None = None
+    event_markers_file_imported: bool | None = None
 
     blink_times: np.ndarray | None = None
     event_markers: pd.DataFrame | None = None
@@ -188,6 +181,7 @@ class DataImporter:
                 for fpath in self.event_files:
                     self.add_event_markers_from_event_files_to_mne_raw(fpath)
                 self.recording.event_markers_imported = True
+                self.recording.event_markers_file_imported = True
                 message = f"Successfully read event markers from file(s)."
                 self._log_message(message)
                 if self.create_mne_report:
@@ -264,7 +258,10 @@ class DataImporter:
                 message = "Successfully imported blink data."
             except Exception as e:
                 self.recording.blink_data_imported = False
-                message = e
+                message = (
+                    str(e)
+                    + f"\nUnique values in the column-{IMOTIONS_BLINK_COL}: {self.recording.df_raw[IMOTIONS_BLINK_COL].unique()}."
+                )
         else:
             self.recording.blink_data_imported = False
             message = f"Blink column ('{IMOTIONS_BLINK_COL}' not found in raw data from iMotions.)"
@@ -272,17 +269,20 @@ class DataImporter:
         if self.create_mne_report:
             self.report.add_html(title="Blink data import", html=message)
 
-        # Extract event markers
+        # Extract event markers (using embedded triggers)
         if IMOTIONS_MARKERS_COL in self.recording.df_raw.columns:
             try:
                 self.read_event_markers_from_imotions_data()
                 self.recording.event_markers_imported = True
+                self.recording.event_markers_trig_imported = True
                 message = "Successfully imported event markers."
             except Exception as e:
                 self.recording.event_markers_imported = False
+                self.recording.event_markers_trig_imported = False
                 message = e
         else:
             self.recording.event_markers_imported = False
+            self.recording.event_markers_trig_imported = False
             message = f"Event marker column ('{IMOTIONS_MARKERS_COL}' not found in raw data from iMotions.)"
         self._log_message(message)
         if self.create_mne_report:
@@ -451,7 +451,7 @@ class DataImporter:
         df_event = self.recording.df_raw[[IMOTIONS_TIMESTAMP_COL, col_event]].copy()
         df_event = df_event[df_event[col_event] == positive_val_event]
         if df_event.dropna().empty:
-            raise ValueError(f"No positive instance found for event: {col_event}")
+            raise ValueError(f"No positive instance found for event: {col_event}.")
         else:
             event_onsets = (
                 df_event[IMOTIONS_TIMESTAMP_COL]

@@ -28,9 +28,12 @@ CREATE TABLE recordings (
     is_ecg_imported BOOLEAN,
     is_blinks_imported BOOLEAN,
     is_events_imported BOOLEAN,
+    is_events_trig_imported BOOLEAN,
+    is_events_file_imported BOOLEAN,
     is_digitization_imported BOOLEAN,
     is_headcircum_imported BOOLEAN,
     qc_passed BOOLEAN,
+    qc_notes TEXT,
     imported_on TEXT,
     PRIMARY KEY (sub_id, ses_id),
     FOREIGN KEY (sub_id) REFERENCES participants (sub_id),
@@ -150,6 +153,8 @@ def import_unimported_eegacamp_data(
     is_ecg_imported = data_importer.recording.ecg_data_imported
     is_blinks_imported = data_importer.recording.blink_data_imported
     is_events_imported = data_importer.recording.event_markers_imported
+    is_events_trig_imported = data_importer.recording.event_markers_trig_imported
+    is_events_file_imported = data_importer.recording.event_markers_file_imported
     is_digitization_imported = (
         True if data_importer.recording.dig is not None else False
     )
@@ -166,6 +171,8 @@ def import_unimported_eegacamp_data(
                 "is_ecg_imported",
                 "is_blinks_imported",
                 "is_events_imported",
+                "is_events_trig_imported",
+                "is_events_file_imported",
                 "is_digitization_imported",
                 "is_headcircum_imported",
                 "imported_on",
@@ -178,6 +185,8 @@ def import_unimported_eegacamp_data(
                     is_ecg_imported,
                     is_blinks_imported,
                     is_events_imported,
+                    is_events_trig_imported,
+                    is_events_file_imported,
                     is_digitization_imported,
                     is_headcircum_imported,
                     datetime.now().isoformat(),
@@ -192,6 +201,8 @@ def import_unimported_eegacamp_data(
                 "is_ecg_imported",
                 "is_blinks_imported",
                 "is_events_imported",
+                "is_events_trig_imported",
+                "is_events_file_imported",
                 "is_digitization_imported",
                 "is_headcircum_imported",
                 "imported_on",
@@ -202,6 +213,8 @@ def import_unimported_eegacamp_data(
                     is_ecg_imported,
                     is_blinks_imported,
                     is_events_imported,
+                    is_events_trig_imported,
+                    is_events_file_imported,
                     is_digitization_imported,
                     is_headcircum_imported,
                     datetime.now().isoformat(),

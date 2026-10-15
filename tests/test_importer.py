@@ -60,6 +60,9 @@ def test_run_full():
     assert "GND" in data_importer.recording.raw.ch_names
     assert data_importer.recording.raw.get_montage() == data_importer.recording.dig
     assert "trials-start" in data_importer.recording.raw.annotations.description
+    assert data_importer.recording.event_markers_imported
+    assert not data_importer.recording.event_markers_trig_imported
+    assert data_importer.recording.event_markers_file_imported
 
 
 # Run data import (with embedded triggers)
