@@ -146,9 +146,9 @@ class DataImporter:
                     self.report.add_html(title="Digitization data import", html=message)
                     if isinstance(self.recording.dig, mne.channels.DigMontage):
                         if self.fpath_headcircum is not None:
-                            self.evaluate_head_radius()
                             # 2D Matplotlib plot
                             try:
+                                self.evaluate_head_radius()
                                 message = f"Successfully read head radius and circumference from file."
                             except Exception as e:
                                 message = f"Head radius and/or circumference could not be read from file:\n{e}"
@@ -189,25 +189,31 @@ class DataImporter:
 
             # Add events to Raw from Excel files
             if not self.recording.event_markers_imported and self.event_files:
-                for fpath in self.event_files:
-                    self.add_event_markers_from_event_files_to_mne_raw(fpath)
-                self.recording.event_markers_imported = True
-                self.recording.event_markers_file_imported = True
-                message = f"Successfully read event markers from file(s)."
+                try:
+                    for fpath in self.event_files:
+                        self.add_event_markers_from_event_files_to_mne_raw(fpath)
+                    self.recording.event_markers_imported = True
+                    self.recording.event_markers_file_imported = True
+                    message = f"Successfully read event markers from file(s)."
+                    if self.create_mne_report:
+                        events, event_id = mne.events_from_annotations(
+                            self.recording.raw
+                        )
+                        self.report.add_events(
+                            events,
+                            f"Events: after including event markers read from file(s)",
+                            section="Events",
+                            event_id=event_id,
+                            sfreq=self.recording.raw.info["sfreq"],
+                        )
+                except Exception as e:
+                    message = f"Could not read event markers from file(s):\n{e}"
                 self._log_message(message)
                 if self.create_mne_report:
                     self.report.add_html(
                         title="Event markers: from file(s)",
                         section="Event markers import",
                         html=message,
-                    )
-                    events, event_id = mne.events_from_annotations(self.recording.raw)
-                    self.report.add_events(
-                        events,
-                        f"Events: after including event markers read from file(s)",
-                        section="Events",
-                        event_id=event_id,
-                        sfreq=self.recording.raw.info["sfreq"],
                     )
 
             # Save MNE Raw to disk
