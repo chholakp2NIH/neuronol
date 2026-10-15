@@ -8,15 +8,16 @@ from neuronol.io.dbmanager import DBManager
 # Given
 data_dir = Path(
     os.environ.get(
-        "EXAMPLE_DATA_DIR", os.path.expanduser("~/data/bids/imotions-sample/")
+        "EXAMPLE_DATA_DIR",
+        os.path.expanduser("~/data/bids/eegacamp/"),
     )
 )
-recording_data_dir = data_dir / "sub-003/ses-studyvisit2/eeg/"
+recording_data_dir = data_dir / "sub-008/ses-studyvisit2/eeg/"
 fpath_db = data_dir / "derivatives/imaging.db"
 
 # Prepare db
-if fpath_db.exists():
-    fpath_db.unlink()
+# if fpath_db.exists():
+#     fpath_db.unlink()
 if fpath_db.exists():
     db_manager = DBManager(fpath_db)
 else:
@@ -25,4 +26,4 @@ else:
     )
 
 # Import data if not exist already
-import_unimported_eegacamp_data(recording_data_dir, db_manager)
+import_unimported_eegacamp_data(recording_data_dir, db_manager, update_db=True)
