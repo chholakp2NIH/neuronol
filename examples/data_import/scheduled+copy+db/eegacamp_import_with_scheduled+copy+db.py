@@ -38,19 +38,18 @@ else:
         fpath_db, initialize_db=True, db_init_script=EEGACAMP_DB_INIT_SCRIPT
     )
 
-t_start = datetime.now()
-# first_run_time = t_start.replace(second=t_start.second + 1)
+# t_start = datetime.now()
 while True:
     # Calculate time until next scheduled run (in seconds)
     now = datetime.now()
-    # next_run = now.replace(hour=3, minute=0, second=0, microsecond=0)
-    next_run = t_start.replace(second=t_start.second + 1)
+    next_run = now.replace(hour=3, minute=0, second=0, microsecond=0)
+    # next_run = t_start.replace(second=t_start.second + 1)
     if now >= next_run:
         next_run += timedelta(days=1)
     t_sleep = (next_run - now).total_seconds()
 
     # Sleep until next scheduled run and then resume script
-    # time.sleep(5)
+    print(f"\nScript will resume at: {next_run}")
     time.sleep(t_sleep)
     print(f"\nResuming script run at: {datetime.now()}")
 
