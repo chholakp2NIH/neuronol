@@ -12,7 +12,7 @@ data_dir = Path(
         os.path.expanduser("~/data/bids/eegacamp/"),
     )
 )
-recording_data_dir = data_dir / "sub-008/ses-studyvisit2/eeg/"
+recording_data_dir = data_dir / "sub-007/ses-studyvisit3/eeg/"
 fpath_db = data_dir / "derivatives/imaging.db"
 
 # Prepare db
