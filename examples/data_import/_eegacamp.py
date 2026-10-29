@@ -94,29 +94,18 @@ def import_unimported_eegacamp_data(
     Import recorded data only if it hasn't been imported previously,
     as tracked by the db.
     """
-    # Get subj and ses ids from recording data dir
-    sub_id_str, ses_id = get_sub_and_ses_from_bids_rec_dir(recording_data_dir)
-    sub_id = int(sub_id_str)
 
-    # Query db
-    existing_recs_sub_ids = db_manager.read_col_values_from_table(
-        "recordings", "sub_id"
+    # Continue with import only if recording does not exist or db can be updated
+    recording_exists, participant_exists = check_recording_exists_in_db(
+        recording_data_dir, db_manager
     )
-    existing_recs_ses_ids = db_manager.read_col_values_from_table(
-        "recordings", "ses_id"
-    )
-    existing_recs = list(zip(existing_recs_sub_ids, existing_recs_ses_ids))
-    existing_participants_sub_ids = db_manager.read_col_values_from_table(
-        "participants", "sub_id"
-    )
-
-    if (sub_id, ses_id) in existing_recs and not update_db:
+    if recording_exists and not update_db:
         print("\n(!!) Recording already exists in db. Exiting...")
         return
-    elif (sub_id, ses_id) in existing_recs and update_db:
-        print(f"\nUpdating recording data for sub-{sub_id} ses-{ses_id}...")
+    elif recording_exists and update_db:
+        print(f"\nUpdating recording data for {recording_data_dir} in db...")
     else:
-        print(f"\nImporting recording data for sub-{sub_id} ses-{ses_id}...")
+        print(f"\nImporting recording data for {recording_data_dir} in db...")
 
     # Import data
     bids_fpaths = create_bids_fpaths_from_recording_dir(recording_data_dir)
@@ -133,22 +122,7 @@ def import_unimported_eegacamp_data(
     )
     data_importer.run()
 
-    # Add/update new recording data to db
-    #   Table: participants
-    if sub_id not in existing_participants_sub_ids:
-        db_manager.add_row_to_table(
-            "participants", ("sub_id",), [(sub_id,)]
-        )  # add participant
-
-    #   Table: sessions
-    if (sub_id, ses_id) not in existing_recs:
-        db_manager.add_row_to_table(
-            "sessions",
-            ("sub_id", "ses_id"),
-            [(sub_id, ses_id)],
-        )  # add session
-
-    #   Table: recordings
+    # Determine recording import metadata values
     is_eeg_imported = True if data_importer.recording.raw is not None else False
     is_ecg_imported = data_importer.recording.ecg_data_imported
     is_blinks_imported = data_importer.recording.blink_data_imported
@@ -161,7 +135,102 @@ def import_unimported_eegacamp_data(
     is_headcircum_imported = (
         True if data_importer.recording.head_circum is not None else False
     )
-    if (sub_id, ses_id) not in existing_recs:
+
+    # Add/update new recording data to db
+    add_recording_to_db(
+        recording_data_dir,
+        db_manager,
+        update_db=update_db,
+        is_eeg_imported=is_eeg_imported,
+        is_ecg_imported=is_ecg_imported,
+        is_blinks_imported=is_blinks_imported,
+        is_events_imported=is_events_imported,
+        is_events_trig_imported=is_events_trig_imported,
+        is_events_file_imported=is_events_file_imported,
+        is_digitization_imported=is_digitization_imported,
+        is_headcircum_imported=is_headcircum_imported,
+    )
+
+
+def check_recording_exists_in_db(
+    recording_data_dir: Path,
+    db_manager: DBManager,
+):
+    """
+    Query db to check whether given recording already exists in db.
+    """
+    # Get subj and ses ids from recording data dir
+    sub_id_str, ses_id = get_sub_and_ses_from_bids_rec_dir(recording_data_dir)
+    sub_id = int(sub_id_str)
+
+    # Query db
+    existing_recs_sub_ids = db_manager.read_col_values_from_table(
+        "recordings", "sub_id"
+    )
+    existing_recs_ses_ids = db_manager.read_col_values_from_table(
+        "recordings", "ses_id"
+    )
+    existing_recs = list(zip(existing_recs_sub_ids, existing_recs_ses_ids))
+    existing_participants_sub_ids = db_manager.read_col_values_from_table(
+        "participants", "sub_id"
+    )
+
+    # Check whether sub and ses already exists
+    if (sub_id, ses_id) in existing_recs:
+        recording_exists = True
+    else:
+        recording_exists = False
+
+    # Check whether sub already exists in participants table
+    if sub_id in existing_participants_sub_ids:
+        participant_exists = True
+    else:
+        participant_exists = False
+
+    return recording_exists, participant_exists
+
+
+def add_recording_to_db(
+    recording_data_dir: Path,
+    db_manager: DBManager,
+    update_db: bool = False,
+    is_eeg_imported: bool | None = None,
+    is_ecg_imported: bool | None = None,
+    is_blinks_imported: bool | None = None,
+    is_events_imported: bool | None = None,
+    is_events_trig_imported: bool | None = None,
+    is_events_file_imported: bool | None = None,
+    is_digitization_imported: bool | None = None,
+    is_headcircum_imported: bool | None = None,
+):
+    """
+    Add/update recording data to db.
+    """
+    # Query db to see whether recording/participant already exist
+    recording_exists, participant_exists = check_recording_exists_in_db(
+        recording_data_dir, db_manager
+    )
+
+    # Get subj and ses ids from recording data dir
+    sub_id_str, ses_id = get_sub_and_ses_from_bids_rec_dir(recording_data_dir)
+    sub_id = int(sub_id_str)
+
+    # Add/update new recording data to db
+    #   Table: participants
+    if not participant_exists:
+        db_manager.add_row_to_table(
+            "participants", ("sub_id",), [(sub_id,)]
+        )  # add participant
+
+    #   Table: sessions
+    if not recording_exists:
+        db_manager.add_row_to_table(
+            "sessions", ("sub_id", "ses_id"), [(sub_id, ses_id)]
+        )  # add session
+
+    #   Table: recordings
+    #       Add rec (if does not already exists)
+    if not recording_exists:
         db_manager.add_row_to_table(
             "recordings",
             (
@@ -193,7 +262,9 @@ def import_unimported_eegacamp_data(
                 )
             ],
         )  # add recording
-    elif (sub_id, ses_id) in existing_recs and update_db:
+
+    #       Update rec (if already exists)
+    elif recording_exists and update_db:
         db_manager.update_row_in_table(
             "recordings",
             (
@@ -226,5 +297,7 @@ def import_unimported_eegacamp_data(
             ),
             [(sub_id, ses_id)],
         )  # update recording
+
+    #       Unexpected condition
     else:
         raise ValueError("Unexpected if/else condition seen")
